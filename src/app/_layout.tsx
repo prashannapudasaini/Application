@@ -1,19 +1,23 @@
 import { Stack } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
 import { COLORS } from "../constants/theme";
+import { CartProvider } from "../context/CartContext"; // <-- 1. Import your Cart Provider
 
 export default function RootLayout() {
-  if (Platform.OS === "web") {
-    return (
-      <View style={styles.webDesktopBackground}>
-        <View style={styles.mobileMockupContainer}>
-          <Stack screenOptions={{ headerShown: false }} />
+  // 2. Wrap everything in CartProvider so the whole app shares the same memory
+  return (
+    <CartProvider>
+      {Platform.OS === "web" ? (
+        <View style={styles.webDesktopBackground}>
+          <View style={styles.mobileMockupContainer}>
+            <Stack screenOptions={{ headerShown: false }} />
+          </View>
         </View>
-      </View>
-    );
-  }
-
-  return <Stack screenOptions={{ headerShown: false }} />;
+      ) : (
+        <Stack screenOptions={{ headerShown: false }} />
+      )}
+    </CartProvider>
+  );
 }
 
 const styles = StyleSheet.create({

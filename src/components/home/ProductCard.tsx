@@ -1,6 +1,5 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
 import {
   Image,
   Platform,
@@ -10,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import { useCart } from "../../context/CartContext"; // <-- NEW IMPORT
 
 interface Product {
   id: string;
@@ -24,12 +24,16 @@ interface Props {
 
 export default function ProductCard({ product }: Props) {
   const router = useRouter();
-  const [quantity, setQuantity] = useState(0);
 
-  // Clean the URL to ensure no invisible spaces break the link
-  const cleanImageUrl = product.image
-    ? product.image.trim()
-    : "https://via.placeholder.com/150";
+  // Bring in the global cart powers!
+  const { items, addToCart, updateQuantity } = useCart();
+
+  // Check if THIS specific product is already in the cart
+  const cartItem = items.find((item) => item.id === product.id);
+  const quantity = cartItem ? cartItem.quantity : 0;
+
+  // Clean the URL
+  const cleanImageUrl = product.image ? product.image.trim() : "";
 
   return (
     <TouchableOpacity
@@ -38,17 +42,15 @@ export default function ProductCard({ product }: Props) {
       onPress={() => router.push(`/product/detail/${product.id}`)}
     >
       <View style={styles.imageContainer}>
-        {/* THE FIX: Use standard HTML img on Web to bypass strict RN Web Image wrappers */}
-        {Platform.OS === "web" ? (
+        {!cleanImageUrl ? (
+          <View style={styles.fallbackBox}>
+            <Feather name="image" size={32} color="#D3D3D3" />
+          </View>
+        ) : Platform.OS === "web" ? (
           <img
             src={cleanImageUrl}
             alt={product.name}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
-            onError={(e) => {
-              // Fallback if the image link is truly broken
-              (e.target as HTMLImageElement).src =
-                "https://via.placeholder.com/150";
-            }}
           />
         ) : (
           <Image
@@ -69,25 +71,34 @@ export default function ProductCard({ product }: Props) {
       <View style={styles.bottomRow}>
         <Text style={styles.priceText}>₹{product.price}</Text>
 
+        {/* Dynamic Cart Buttons */}
         {quantity === 0 ? (
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => setQuantity(1)}
             activeOpacity={0.8}
+            onPress={() =>
+              addToCart({
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                image: product.image,
+                size: product.size,
+              })
+            }
           >
             <Feather name="plus" size={16} color="#FFF" />
           </TouchableOpacity>
         ) : (
           <View style={styles.counterPill}>
             <TouchableOpacity
-              onPress={() => setQuantity((q) => q - 1)}
+              onPress={() => updateQuantity(product.id, -1)}
               style={styles.counterBtn}
             >
               <Feather name="minus" size={14} color={COLORS.card} />
             </TouchableOpacity>
             <Text style={styles.counterText}>{quantity}</Text>
             <TouchableOpacity
-              onPress={() => setQuantity((q) => q + 1)}
+              onPress={() => updateQuantity(product.id, 1)}
               style={styles.counterBtn}
             >
               <Feather name="plus" size={14} color={COLORS.card} />
@@ -125,9 +136,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  productImage: {
+  productImage: { width: "100%", height: "100%" },
+  fallbackBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     width: "100%",
-    height: "100%",
+    backgroundColor: "#F9F9F9",
+    borderRadius: RADIUS.small,
   },
   detailsContainer: { marginBottom: SPACING.s },
   productName: {
