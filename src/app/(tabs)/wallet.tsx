@@ -48,10 +48,10 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Premium Header */}
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Sitaram Pay</Text>
-          <TouchableOpacity style={styles.historyBtn}>
+          <TouchableOpacity style={styles.historyBtn} activeOpacity={0.7}>
             <MaterialCommunityIcons
               name="history"
               size={24}
@@ -60,36 +60,43 @@ export default function WalletScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Digital Card (Balance) */}
+        {/* Optimized, Smaller & Cleaner Digital Card */}
         <View style={styles.digitalCard}>
-          <View style={styles.cardTop}>
-            <MaterialCommunityIcons
-              name="contactless-payment"
-              size={28}
-              color="rgba(255,255,255,0.7)"
-            />
-            <Text style={styles.cardTag}>ACTIVE</Text>
+          <View style={styles.cardInfoContainer}>
+            <View style={styles.cardTextLeft}>
+              <Text style={styles.balanceLabel}>Available Balance</Text>
+              <Text style={styles.balanceAmount}>
+                ₹1,250<Text style={styles.balanceDecimal}>.00</Text>
+              </Text>
+            </View>
+            
+            <View style={styles.cardVisualRight}>
+              <Text style={styles.cardTag}>ACTIVE</Text>
+              <MaterialCommunityIcons
+                name="contactless-payment"
+                size={24}
+                color="rgba(255,255,255,0.6)"
+              />
+            </View>
           </View>
 
-          <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceAmount}>
-            ₹1,250<Text style={styles.balanceDecimal}>.00</Text>
-          </Text>
-
+          {/* Streamlined Horizontal Actions */}
           <View style={styles.cardActions}>
             <Pressable
               style={styles.actionBtn}
-              android_ripple={{ color: "rgba(255,255,255,0.2)" }}
+              android_ripple={{ color: "rgba(255,255,255,0.15)" }}
             >
-              <Feather name="plus" size={18} color="#FFF" />
+              <Feather name="plus" size={16} color="#FFF" />
               <Text style={styles.actionText}>Add Money</Text>
             </Pressable>
+            
             <View style={styles.actionDivider} />
+            
             <Pressable
               style={styles.actionBtn}
-              android_ripple={{ color: "rgba(255,255,255,0.2)" }}
+              android_ripple={{ color: "rgba(255,255,255,0.15)" }}
             >
-              <Feather name="arrow-up-right" size={18} color="#FFF" />
+              <Feather name="arrow-up-right" size={16} color="#FFF" />
               <Text style={styles.actionText}>Send Bank</Text>
             </Pressable>
           </View>
@@ -152,61 +159,68 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.l,
+    marginBottom: SPACING.m, // Reduced spacing
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 26, // Marginally crisper size
     fontWeight: "900",
     color: COLORS.text,
     letterSpacing: -0.5,
   },
   historyBtn: { padding: SPACING.xs },
 
+  // --- COMPACT DIGITAL CARD STYLES ---
   digitalCard: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.large,
-    padding: SPACING.l,
+    padding: 16, // Snug, unified padding
     shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
-    marginBottom: SPACING.xl,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+    marginBottom: SPACING.l,
   },
-  cardTop: {
+  cardInfoContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: SPACING.l,
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  cardTextLeft: {
+    flex: 1,
+  },
+  cardVisualRight: {
+    alignItems: "flex-end",
+    gap: 12,
   },
   cardTag: {
     color: "#FFF",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: RADIUS.small,
   },
   balanceLabel: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 14,
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 12,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   balanceAmount: {
     color: "#FFF",
-    fontSize: 38,
+    fontSize: 30, // Scaled down from 38
     fontWeight: "900",
-    letterSpacing: -1,
-    marginBottom: SPACING.xl,
+    letterSpacing: -0.5,
   },
-  balanceDecimal: { fontSize: 24, color: "rgba(255,255,255,0.8)" },
+  balanceDecimal: { fontSize: 18, color: "rgba(255,255,255,0.75)" },
 
   cardActions: {
     flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.15)",
+    backgroundColor: "rgba(0,0,0,0.12)",
     borderRadius: RADIUS.medium,
     overflow: "hidden",
   },
@@ -215,29 +229,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 14,
-    gap: SPACING.s,
+    paddingVertical: 10, // Slimmer pill profile
+    gap: 6,
   },
-  actionText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  actionText: { color: "#FFF", fontSize: 13, fontWeight: "700" },
   actionDivider: {
     width: 1,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    marginVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginVertical: 6,
   },
+  // -----------------------------------
 
   transactionsSection: { flex: 1 },
   sectionHeading: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "900",
     color: COLORS.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: SPACING.m,
+    marginBottom: SPACING.s,
   },
   txnList: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.large,
-    padding: SPACING.m,
+    paddingHorizontal: SPACING.m,
+    paddingVertical: SPACING.xs,
     borderWidth: 1,
     borderColor: COLORS.border,
     shadowColor: "#000",
@@ -253,10 +269,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  txnRowLast: { borderBottomWidth: 0, paddingBottom: SPACING.xs },
+  txnRowLast: { borderBottomWidth: 0 },
   txnIconBox: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: RADIUS.round,
     justifyContent: "center",
     alignItems: "center",
@@ -264,11 +280,11 @@ const styles = StyleSheet.create({
   },
   txnDetails: { flex: 1 },
   txnTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  txnDate: { fontSize: 12, color: COLORS.textSecondary, fontWeight: "500" },
-  txnAmount: { fontSize: 16, fontWeight: "900" },
+  txnDate: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500" },
+  txnAmount: { fontSize: 15, fontWeight: "900" },
 });
