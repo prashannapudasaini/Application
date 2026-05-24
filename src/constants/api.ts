@@ -1,18 +1,12 @@
-import { Platform } from "react-native";
 
 // Your verified local IPv4 Address
 const LOCAL_IP = "192.168.1.80";
 
-// The base URL pointing to your XAMPP htdocs folder
-export const BASE_URL =
-  Platform.OS === "web"
-    ? "http://localhost/sita-ram-dairy/backend"
-    : `http://${LOCAL_IP}/sita-ram-dairy/backend`;
+// Force the IP address for BOTH web and mobile to prevent Chrome CORS blocking
+export const BASE_URL = `http://${LOCAL_IP}/sita-ram-dairy/backend`;
 
 export const API_ENDPOINTS = {
   PRODUCTS: `${BASE_URL}/api/products/index.php`,
-
-  // Pointing to the new public categories endpoint
   CATEGORIES: `${BASE_URL}/api/categories/index.php`,
 };
 
