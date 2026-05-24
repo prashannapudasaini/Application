@@ -3,155 +3,167 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import ProductCard from "../../components/home/ProductCard";
-import { API_ENDPOINTS, getImageUrl } from "../../constants/api";
-import { COLORS, SPACING } from "../../constants/theme";
+import { BASE_URL, getImageUrl } from "../../constants/api";
+import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import { useCart } from "../../context/CartContext";
 
-// Reusing our Product interface
-interface FormattedProduct {
-  id: string;
-  name: string;
-  size: string;
-  price: number;
-  image: string;
-}
-
-export default function CategoryProductsScreen() {
+export default function ProductDetailScreen() {
   const router = useRouter();
-  // We grab the category title that was passed when the user clicked the card (e.g., "Paneer")
-  const { title } = useLocalSearchParams();
+  const { id } = useLocalSearchParams();
+  const { addToCart } = useCart();
 
-  const [products, setProducts] = useState<FormattedProduct[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (title) {
-      fetchProductsByCategory(title as string);
-    }
-  }, [title]);
+    // Fetches the specific product details from your PHP backend
+    fetch(`${BASE_URL}/api/products/get_one.php?id=${id}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.status === "success") {
+          setProduct(json.data);
+        }
+      })
+      .catch((err) => console.error("Detail Fetch Error:", err))
+      .finally(() => setLoading(false));
+  }, [id]);
 
-  const fetchProductsByCategory = async (categoryName: string) => {
-    try {
-      setIsLoading(true);
-      // We pass the category name to the API we just updated
-      const url = `${API_ENDPOINTS.PRODUCTS}?category=${encodeURIComponent(categoryName)}`;
-      const response = await fetch(url);
-      const json = await response.json();
+  if (loading)
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  if (!product)
+    return (
+      <View style={styles.center}>
+        <Text>Product not found.</Text>
+      </View>
+    );
 
-      if (json.status === "success") {
-        const mappedProducts = json.data.map((item: any) => {
-          const firstVariant =
-            item.variants && item.variants.length > 0 ? item.variants[0] : null;
-          return {
-            id: item.id.toString(),
-            name: item.name,
-            size: firstVariant ? firstVariant.size : "N/A",
-            price: firstVariant ? firstVariant.price_npr : 0,
-            image: getImageUrl(item.image),
-          };
-        });
-        setProducts(mappedProducts);
-      }
-    } catch (err) {
-      console.error("Fetch Error:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const fullImageUrl = getImageUrl(product.base_image || product.image);
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Custom Header */}
+    <View style={styles.container}>
+      {/* Sticky Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title} Products</Text>
-        <View style={{ width: 40 }} /> {/* Spacer to center title */}
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {isLoading ? (
-          <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-          </View>
-        ) : products.length === 0 ? (
-          <View style={styles.centerBox}>
-            <Feather
-              name="shopping-bag"
-              size={48}
-              color="#D3D3D3"
-              style={{ marginBottom: 16 }}
-            />
-            <Text style={styles.emptyText}>
-              No products found in {title} yet.
-            </Text>
-            <Text style={styles.emptySubtext}>
-              Check back later for fresh stock!
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.productGrid}>
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </View>
-        )}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Product Hero Image */}
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{ uri: fullImageUrl }}
+            style={styles.image}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Product Details Card */}
+        <View style={styles.infoContainer}>
+          <Text style={styles.name}>{product.name}</Text>
+          <Text style={styles.price}>₹{product.price || 0}</Text>
+
+          <Text style={styles.sectionTitle}>Description</Text>
+          <Text style={styles.description}>
+            {product.description || "Freshly sourced from our local farms."}
+          </Text>
+
+          <Text style={styles.sectionTitle}>Features</Text>
+          <Text style={styles.description}>
+            {product.features || "100% Organic and Natural."}
+          </Text>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Footer Add to Cart Button */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.addToCartBtn}
+          activeOpacity={0.8}
+          onPress={() => {
+            addToCart({
+              id: product.id,
+              name: product.name,
+              price: parseFloat(product.price),
+              image: product.base_image || product.image,
+              size: "Standard",
+            });
+            // Optional: Provide visual feedback or just go back
+            router.back();
+          }}
+        >
+          <Text style={styles.btnText}>Add to Cart</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.m,
-    backgroundColor: COLORS.card,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  header: { position: "absolute", top: 50, left: 20, zIndex: 10 },
+  backBtn: {
+    backgroundColor: "#FFF",
+    padding: 10,
+    borderRadius: RADIUS.round,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 5,
   },
-  backButton: { padding: SPACING.xs },
-  headerTitle: { fontSize: 18, fontWeight: "900", color: COLORS.text },
-  scrollContent: { paddingBottom: 100, paddingTop: SPACING.m },
-  productGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.m,
-  },
-  centerBox: {
-    padding: SPACING.xl,
-    alignItems: "center",
+  scrollContent: { paddingBottom: 100 },
+  imageWrapper: {
+    height: 350,
+    backgroundColor: "#F9F9F9",
     justifyContent: "center",
-    minHeight: 300,
+    alignItems: "center",
   },
-  emptyText: {
+  image: { width: "80%", height: "80%" },
+  infoContainer: {
+    padding: SPACING.m,
+    backgroundColor: COLORS.card,
+    marginTop: -20,
+    borderRadius: RADIUS.large,
+    borderTopWidth: 1,
+    borderColor: COLORS.border,
+  },
+  name: { fontSize: 24, fontWeight: "900", color: COLORS.text },
+  price: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.primary,
+    marginVertical: SPACING.s,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: COLORS.text,
-    textAlign: "center",
+    marginTop: SPACING.m,
+    marginBottom: 4,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginTop: 8,
-    textAlign: "center",
+  description: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 22 },
+  footer: {
+    padding: SPACING.m,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.card,
   },
+  addToCartBtn: {
+    backgroundColor: COLORS.primary,
+    padding: SPACING.m,
+    borderRadius: RADIUS.medium,
+    alignItems: "center",
+  },
+  btnText: { color: "#FFF", fontSize: 16, fontWeight: "800" },
 });

@@ -8,8 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { getImageUrl } from "../../constants/api"; // Ensure this helper is used!
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
-import { useCart } from "../../context/CartContext"; // <-- NEW IMPORT
+import { useCart } from "../../context/CartContext";
 
 interface Product {
   id: string;
@@ -24,37 +25,35 @@ interface Props {
 
 export default function ProductCard({ product }: Props) {
   const router = useRouter();
-
-  // Bring in the global cart powers!
   const { items, addToCart, updateQuantity } = useCart();
 
-  // Check if THIS specific product is already in the cart
   const cartItem = items.find((item) => item.id === product.id);
   const quantity = cartItem ? cartItem.quantity : 0;
 
-  // Clean the URL
-  const cleanImageUrl = product.image ? product.image.trim() : "";
+  // Use the global helper to build the full path
+  const fullImageUrl = getImageUrl(product.image);
 
   return (
     <TouchableOpacity
       style={styles.cardContainer}
       activeOpacity={0.9}
-      onPress={() => router.push(`/product/detail/${product.id}`)}
+      // Fixed: Pointing to the correct dynamic route
+      onPress={() => router.push(`/product/${product.id}` as any)}
     >
       <View style={styles.imageContainer}>
-        {!cleanImageUrl ? (
+        {!fullImageUrl ? (
           <View style={styles.fallbackBox}>
             <Feather name="image" size={32} color="#D3D3D3" />
           </View>
         ) : Platform.OS === "web" ? (
           <img
-            src={cleanImageUrl}
+            src={fullImageUrl}
             alt={product.name}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         ) : (
           <Image
-            source={{ uri: cleanImageUrl }}
+            source={{ uri: fullImageUrl }}
             style={styles.productImage}
             resizeMode="contain"
           />
@@ -70,12 +69,9 @@ export default function ProductCard({ product }: Props) {
 
       <View style={styles.bottomRow}>
         <Text style={styles.priceText}>₹{product.price}</Text>
-
-        {/* Dynamic Cart Buttons */}
         {quantity === 0 ? (
           <TouchableOpacity
             style={styles.addButton}
-            activeOpacity={0.8}
             onPress={() =>
               addToCart({
                 id: product.id,
@@ -119,11 +115,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.m,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
   },
   imageContainer: {
     backgroundColor: COLORS.background,
