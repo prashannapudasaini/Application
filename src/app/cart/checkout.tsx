@@ -1,7 +1,9 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,402 +12,469 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import { useCart } from "../../context/CartContext";
 
 const PAYMENT_METHODS = [
   {
-    id: "wallet",
-    title: "Wallet Balance",
-    icon: "credit-card",
-    balance: "₹1,250.00",
+    id: "cod",
+    title: "Cash on Delivery",
+    icon: "cash",
+    desc: "Pay when your order arrives",
   },
-  { id: "upi", title: "UPI / Google Pay", icon: "smartphone" },
-  { id: "card", title: "Card Payment", icon: "credit-card" },
-  { id: "cod", title: "Cash on Delivery", icon: "box" },
+  {
+    id: "wallet",
+    title: "Digital Wallet",
+    icon: "wallet-outline",
+    desc: "eSewa, Khalti, or IME Pay",
+  },
+  {
+    id: "card",
+    title: "Credit / Debit Card",
+    icon: "credit-card-outline",
+    desc: "Visa, MasterCard",
+  },
 ];
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const [selectedPayment, setSelectedPayment] = useState("wallet");
+  const { items, cartTotal, placeOrder } = useCart();
+
+  const [selectedPayment, setSelectedPayment] = useState("cod");
+
+  // 🔥 NEW: State to control our custom success popup
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  if (items.length === 0 && !showSuccessModal) {
+    if (Platform.OS !== "web") {
+      router.replace("/cart");
+    }
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={styles.emptyText}>Your cart is empty.</Text>
+        <TouchableOpacity
+          onPress={() => router.replace("/(tabs)")}
+          style={styles.returnBtn}
+        >
+          <Text style={styles.returnBtnText}>Go to Shop</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const deliveryFee = cartTotal > 500 ? 0 : 50;
+  const grandTotal = cartTotal + deliveryFee;
+
+  // 🔥 NEW: Simply trigger the modal instead of browser alerts
+  const handlePlaceOrder = () => {
+    placeOrder(grandTotal); // Process order in the background
+    setShowSuccessModal(true); // Show our beautiful custom UI
+  };
+
+  const handleFinishCheckout = () => {
+    setShowSuccessModal(false);
+    router.replace("/(tabs)/orders"); // Route to orders after they click OK
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
-        <View style={styles.placeholder} />
+        <View style={{ width: 32 }} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Progress Stepper */}
-        <View style={styles.stepperContainer}>
-          <View style={styles.step}>
-            <View style={[styles.stepCircle, styles.stepCircleActive]}>
-              <Text style={styles.stepNumberActive}>1</Text>
-            </View>
-            <Text style={styles.stepLabelActive}>Delivery</Text>
-          </View>
-          <View style={styles.stepperLine} />
-
-          <View style={styles.step}>
-            <View style={styles.stepCircle}>
-              <Text style={styles.stepNumber}>2</Text>
-            </View>
-            <Text style={styles.stepLabel}>Payment</Text>
-          </View>
-          <View style={styles.stepperLine} />
-
-          <View style={styles.step}>
-            <View style={styles.stepCircle}>
-              <Text style={styles.stepNumber}>3</Text>
-            </View>
-            <Text style={styles.stepLabel}>Place Order</Text>
-          </View>
-        </View>
-
-        {/* Delivery Address Section */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
             <TouchableOpacity>
               <Text style={styles.changeText}>Change</Text>
             </TouchableOpacity>
           </View>
-
-          <View style={styles.addressRow}>
-            <Ionicons
-              name="location"
-              size={20}
-              color={COLORS.primary}
-              style={styles.addressIcon}
-            />
-            <Text style={styles.addressText}>221B Baker Street, London</Text>
+          <View style={styles.card}>
+            <View style={styles.addressRow}>
+              <View style={styles.iconCircle}>
+                <Feather name="map-pin" size={20} color={COLORS.primary} />
+              </View>
+              <View style={styles.addressInfo}>
+                <Text style={styles.addressName}>Prashant Sharma</Text>
+                <Text style={styles.addressText}>
+                  Lazimpat, Kathmandu, Bagmati Province
+                </Text>
+                <Text style={styles.addressPhone}>+977 980-0000000</Text>
+              </View>
+            </View>
           </View>
-
-          <TouchableOpacity style={styles.addInstructionBtn}>
-            <Feather
-              name="plus-square"
-              size={16}
-              color={COLORS.textSecondary}
-            />
-            <Text style={styles.addInstructionText}>
-              Add Delivery Instructions
-            </Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Payment Options Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Payment Options</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Order Summary ({items.length} items)
+          </Text>
+          <View style={styles.card}>
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>Item Total</Text>
+              <Text style={styles.billValue}>NPR {cartTotal}</Text>
+            </View>
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>Delivery Fee</Text>
+              <Text
+                style={[
+                  styles.billValue,
+                  deliveryFee === 0 && { color: COLORS.success || "#27AE60" },
+                ]}
+              >
+                {deliveryFee === 0 ? "FREE" : `NPR ${deliveryFee}`}
+              </Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.billRow}>
+              <Text style={styles.grandTotalLabel}>Grand Total</Text>
+              <Text style={styles.grandTotalValue}>NPR {grandTotal}</Text>
+            </View>
+          </View>
+        </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Method</Text>
           {PAYMENT_METHODS.map((method) => {
             const isActive = selectedPayment === method.id;
-
             return (
               <TouchableOpacity
                 key={method.id}
-                style={[styles.paymentRow, isActive && styles.paymentRowActive]}
+                style={[
+                  styles.paymentCard,
+                  isActive && styles.paymentCardActive,
+                ]}
                 activeOpacity={0.8}
                 onPress={() => setSelectedPayment(method.id)}
               >
-                <View style={styles.paymentLeft}>
-                  {/* Custom Radio Button */}
-                  <View
-                    style={[
-                      styles.radioOuter,
-                      isActive && styles.radioOuterActive,
-                    ]}
-                  >
-                    {isActive && <View style={styles.radioInner} />}
-                  </View>
-
-                  {/* Icon */}
-                  <View style={styles.paymentIconBox}>
-                    <Feather
-                      name={method.icon as any}
-                      size={16}
-                      color={isActive ? COLORS.primary : COLORS.textSecondary}
-                    />
-                  </View>
-
+                <View
+                  style={[
+                    styles.iconCircle,
+                    isActive && { backgroundColor: COLORS.primary + "15" },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={method.icon as any}
+                    size={22}
+                    color={isActive ? COLORS.primary : COLORS.textSecondary}
+                  />
+                </View>
+                <View style={styles.paymentInfo}>
                   <Text
                     style={[
                       styles.paymentTitle,
-                      isActive && styles.paymentTitleActive,
+                      isActive && { color: COLORS.primary },
                     ]}
                   >
                     {method.title}
                   </Text>
+                  <Text style={styles.paymentDesc}>{method.desc}</Text>
                 </View>
-
-                {/* Show balance ONLY for Wallet */}
-                {method.balance && (
-                  <Text style={styles.walletBalanceText}>{method.balance}</Text>
-                )}
+                <View
+                  style={[
+                    styles.radioOuter,
+                    isActive && styles.radioOuterActive,
+                  ]}
+                >
+                  {isActive && <View style={styles.radioInner} />}
+                </View>
               </TouchableOpacity>
             );
           })}
         </View>
       </ScrollView>
 
-      {/* Sticky Bottom Action Bar */}
       <View style={styles.bottomBar}>
-        <View style={styles.totalPayableRow}>
-          <Text style={styles.totalPayableLabel}>Total Payable</Text>
-          <Text style={styles.totalPayableAmount}>₹456</Text>
+        <View style={styles.bottomTotalBox}>
+          <Text style={styles.bottomTotalLabel}>Total Amount</Text>
+          <Text style={styles.bottomTotalValue}>NPR {grandTotal}</Text>
         </View>
-
-        <TouchableOpacity style={styles.placeOrderButton} activeOpacity={0.8}>
-          <Text style={styles.placeOrderText}>Place Order</Text>
+        <TouchableOpacity
+          style={styles.placeOrderBtn}
+          activeOpacity={0.8}
+          onPress={handlePlaceOrder}
+        >
+          <Text style={styles.placeOrderText}>PLACE ORDER</Text>
+          <Feather name="check-circle" size={18} color="#FFF" />
         </TouchableOpacity>
       </View>
+
+      {/* 🔥 NEW: Custom Success Modal UI */}
+      <Modal visible={showSuccessModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.successIconWrapper}>
+              <Feather name="check" size={40} color="#FFF" />
+            </View>
+            <Text style={styles.modalTitle}>Order Confirmed!</Text>
+            <Text style={styles.modalMessage}>
+              Your order has been placed successfully.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalBtn}
+              activeOpacity={0.8}
+              onPress={handleFinishCheckout}
+            >
+              <Text style={styles.modalBtnText}>View My Orders</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
+  container: { flex: 1, backgroundColor: COLORS.background },
+  center: { justifyContent: "center", alignItems: "center" },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.m,
   },
+  returnBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: RADIUS.medium,
+  },
+  returnBtnText: { color: "#FFF", fontWeight: "800" },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.m,
+    padding: SPACING.m,
     backgroundColor: COLORS.card,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderColor: COLORS.border,
   },
-  backButton: {
-    padding: SPACING.xs,
-  },
+  backBtn: { padding: SPACING.xs },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
     color: COLORS.text,
-  },
-  placeholder: {
-    width: 32,
+    flex: 1,
+    textAlign: "center",
+    textTransform: "uppercase",
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 100,
+    paddingHorizontal: SPACING.m,
+    paddingTop: SPACING.m,
   },
-  stepperContainer: {
+
+  section: { marginBottom: SPACING.l },
+  sectionHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: SPACING.l,
-    paddingHorizontal: SPACING.xl,
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: SPACING.s,
   },
-  step: {
-    alignItems: "center",
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#001F3F",
+    letterSpacing: 0.5,
+    marginBottom: SPACING.s,
   },
-  stepCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#D3D3D3",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 4,
-    backgroundColor: COLORS.card,
-  },
-  stepCircleActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary,
-  },
-  stepNumber: {
-    fontSize: 10,
+  changeText: {
+    fontSize: 13,
     fontWeight: "700",
-    color: "#D3D3D3",
-  },
-  stepNumberActive: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#FFF",
-  },
-  stepLabel: {
-    fontSize: 10,
-    color: "#D3D3D3",
-    fontWeight: "600",
-  },
-  stepLabelActive: {
-    fontSize: 10,
     color: COLORS.primary,
-    fontWeight: "700",
+    marginBottom: SPACING.s,
   },
-  stepperLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#D3D3D3",
-    marginHorizontal: 8,
-    marginBottom: 12,
-  },
-  sectionCard: {
+
+  card: {
     backgroundColor: COLORS.card,
-    marginHorizontal: SPACING.m,
-    marginBottom: SPACING.m,
-    padding: SPACING.m,
     borderRadius: RADIUS.large,
+    padding: SPACING.m,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: SPACING.m,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.text,
-  },
-  changeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.m,
-  },
-  addressIcon: {
-    marginRight: SPACING.s,
-  },
-  addressText: {
-    fontSize: 13,
-    color: COLORS.text,
-    fontWeight: "600",
-    flex: 1,
-  },
-  addInstructionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.s,
-    paddingTop: SPACING.s,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  addInstructionText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-  paymentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: SPACING.m,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  paymentRowActive: {
-    backgroundColor: "rgba(139, 21, 26, 0.03)",
-    marginHorizontal: -SPACING.m,
-    paddingHorizontal: SPACING.m,
-    borderBottomColor: "transparent",
-  },
-  paymentLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  radioOuter: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: "#D3D3D3",
+  addressRow: { flexDirection: "row", alignItems: "flex-start" },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F8F8F8",
     justifyContent: "center",
     alignItems: "center",
     marginRight: SPACING.m,
   },
-  radioOuterActive: {
-    borderColor: COLORS.primary,
+  addressInfo: { flex: 1 },
+  addressName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: 4,
   },
+  addressText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  addressPhone: { fontSize: 13, fontWeight: "700", color: COLORS.text },
+
+  billRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: SPACING.s,
+  },
+  billLabel: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  billValue: { fontSize: 14, color: COLORS.text, fontWeight: "700" },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.s,
+  },
+  grandTotalLabel: { fontSize: 15, fontWeight: "900", color: COLORS.text },
+  grandTotalValue: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
+
+  paymentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.large,
+    padding: SPACING.m,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.m,
+  },
+  paymentCardActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: "#FFFDFD",
+  },
+  paymentInfo: { flex: 1 },
+  paymentTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  paymentDesc: { fontSize: 12, color: COLORS.textSecondary },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#DDD",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  radioOuterActive: { borderColor: COLORS.primary },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: COLORS.primary,
   },
-  paymentIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: RADIUS.small,
-    backgroundColor: COLORS.background,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: SPACING.s,
-  },
-  paymentTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  paymentTitleActive: {
-    fontWeight: "800",
-  },
-  walletBalanceText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.success,
-  },
+
   bottomBar: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: COLORS.card,
-    paddingHorizontal: SPACING.m,
-    paddingTop: SPACING.m,
-    paddingBottom: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: SPACING.m,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    elevation: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
-    elevation: 10,
   },
-  totalPayableRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: SPACING.m,
-  },
-  totalPayableLabel: {
-    fontSize: 14,
+  bottomTotalBox: { flex: 1 },
+  bottomTotalLabel: {
+    fontSize: 11,
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
-  totalPayableAmount: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: COLORS.text,
-  },
-  placeOrderButton: {
+  bottomTotalValue: { fontSize: 18, fontWeight: "900", color: COLORS.text },
+  placeOrderBtn: {
     backgroundColor: COLORS.primary,
-    height: 54,
-    borderRadius: RADIUS.medium,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    gap: 8,
   },
   placeOrderText: {
     color: "#FFF",
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  // 🔥 NEW: Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: SPACING.xl,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#FFF",
+    borderRadius: RADIUS.large,
+    padding: SPACING.xl,
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  successIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#27AE60",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: SPACING.l,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: COLORS.text,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: SPACING.xl,
+  },
+  modalBtn: {
+    backgroundColor: "#001F3F",
+    width: "100%",
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    alignItems: "center",
+  },
+  modalBtnText: {
+    color: "#FFF",
+    fontSize: 15,
     fontWeight: "800",
+    letterSpacing: 0.5,
   },
 });

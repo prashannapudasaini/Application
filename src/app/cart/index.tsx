@@ -1,8 +1,9 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,96 +12,89 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
-
-// Dummy data representing items in the cart
-const INITIAL_CART = [
-  {
-    id: "1",
-    name: "Sitaram Toned Milk",
-    size: "1 Ltr",
-    price: 56,
-    quantity: 1,
-    image:
-      "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=150&q=80",
-  },
-  {
-    id: "2",
-    name: "Fresh Paneer",
-    size: "200g",
-    price: 80,
-    quantity: 1,
-    image:
-      "https://images.unsplash.com/photo-1631451095765-2c91616fc9e6?auto=format&fit=crop&w=150&q=80",
-  },
-  {
-    id: "3",
-    name: "Desi Ghee",
-    size: "500ml",
-    price: 320,
-    quantity: 1,
-    image:
-      "https://images.unsplash.com/photo-1605297833075-84ab8e833441?auto=format&fit=crop&w=150&q=80",
-  },
-];
+import { useCart } from "../../context/CartContext";
 
 export default function CartScreen() {
   const router = useRouter();
-  const [cartItems, setCartItems] = useState(INITIAL_CART);
+  const { items, updateQuantity, removeFromCart, cartTotal } = useCart();
 
-  // Helper functions to manage state
-  const updateQuantity = (id: string, delta: number) => {
-    setCartItems((prev) =>
-      prev
-        .map((item) => {
-          if (item.id === id) {
-            const newQuantity = Math.max(0, item.quantity + delta);
-            return { ...item, quantity: newQuantity };
-          }
-          return item;
-        })
-        .filter((item) => item.quantity > 0),
-    ); // Remove item if quantity hits 0
+  // 🔥 NEW: States for the custom confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [itemToRemove, setItemToRemove] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  const deliveryFee = items.length > 0 ? (cartTotal > 500 ? 0 : 50) : 0;
+  const grandTotal = cartTotal + deliveryFee;
+
+  // Triggers the modal instead of native alerts
+  const handleClearItem = (cartItemId: string, itemName: string) => {
+    setItemToRemove({ id: cartItemId, name: itemName });
+    setShowConfirmModal(true);
   };
 
-  const calculateTotal = () => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0,
+  // Executes the removal when user clicks "Yes"
+  const confirmRemove = () => {
+    if (itemToRemove) {
+      removeFromCart(itemToRemove.id);
+    }
+    setShowConfirmModal(false);
+    setItemToRemove(null);
+  };
+
+  if (items.length === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+          >
+            <Feather name="arrow-left" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Cart</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconCircle}>
+            <Feather name="shopping-bag" size={40} color={COLORS.primary} />
+          </View>
+          <Text style={styles.emptyTitle}>Your cart is empty</Text>
+          <Text style={styles.emptySubtitle}>
+            Looks like you haven't added any fresh dairy products to your cart
+            yet.
+          </Text>
+          <TouchableOpacity
+            style={styles.shopNowBtn}
+            activeOpacity={0.8}
+            onPress={() => router.push("/(tabs)")}
+          >
+            <Text style={styles.shopNowText}>Start Shopping</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
-  };
-
-  const totalAmount = calculateTotal();
-  const totalItems = cartItems.reduce(
-    (count, item) => count + item.quantity,
-    0,
-  );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      {/* 1. Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Cart</Text>
-          <Text style={styles.headerSubtitle}>{totalItems} Items</Text>
-        </View>
-        <View style={styles.placeholder} /> {/* For centering the title */}
+        <Text style={styles.headerTitle}>My Cart ({items.length})</Text>
+        <View style={{ width: 32 }} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 2. Cart Items List */}
-        <View style={styles.cartList}>
-          {cartItems.map((item) => (
-            <View key={item.id} style={styles.cartItem}>
-              <View style={styles.itemImageContainer}>
+        <View style={styles.itemsContainer}>
+          {items.map((item) => (
+            <View key={item.cartItemId} style={styles.cartItem}>
+              <View style={styles.itemImageWrapper}>
                 <Image
                   source={{ uri: item.image }}
                   style={styles.itemImage}
@@ -108,192 +102,289 @@ export default function CartScreen() {
                 />
               </View>
 
-              <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name}</Text>
+              <View style={styles.itemInfo}>
+                <Text style={styles.itemName} numberOfLines={2}>
+                  {item.name}
+                </Text>
                 <Text style={styles.itemSize}>{item.size}</Text>
-                <Text style={styles.itemPrice}>₹{item.price}</Text>
+                {item.plan !== "One Time" && (
+                  <View style={styles.planBadge}>
+                    <MaterialCommunityIcons
+                      name="calendar-refresh"
+                      size={12}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.planBadgeText}>
+                      {item.plan} Delivery
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.itemPrice}>
+                  NPR {item.price * item.quantity}
+                </Text>
               </View>
 
-              {/* Zepto-style Counter */}
-              <View style={styles.counterPill}>
+              <View style={styles.actionColumn}>
                 <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={() => updateQuantity(item.id, -1)}
+                  onPress={() => handleClearItem(item.cartItemId, item.name)}
+                  style={styles.trashBtn}
                 >
                   <Feather
-                    name="minus"
-                    size={14}
+                    name="trash-2"
+                    size={18}
                     color={COLORS.textSecondary}
                   />
                 </TouchableOpacity>
-                <Text style={styles.counterText}>{item.quantity}</Text>
-                <TouchableOpacity
-                  style={styles.counterBtn}
-                  onPress={() => updateQuantity(item.id, 1)}
-                >
-                  <Feather name="plus" size={14} color={COLORS.primary} />
-                </TouchableOpacity>
+
+                <View style={styles.quantitySelector}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      updateQuantity(item.cartItemId, item.quantity - 1)
+                    }
+                    style={styles.qtyBtn}
+                  >
+                    <Feather name="minus" size={14} color={COLORS.text} />
+                  </TouchableOpacity>
+                  <Text style={styles.qtyText}>{item.quantity}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      updateQuantity(item.cartItemId, item.quantity + 1)
+                    }
+                    style={styles.qtyBtn}
+                  >
+                    <Feather name="plus" size={14} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))}
         </View>
 
-        {/* 3. Bill Details Section */}
-        {totalItems > 0 && (
-          <View style={styles.billContainer}>
-            <Text style={styles.sectionTitle}>Bill Details</Text>
-
-            <View style={styles.billRow}>
-              <Text style={styles.billLabel}>MRP Total</Text>
-              <Text style={styles.billValue}>₹{totalAmount}</Text>
-            </View>
-            <View style={styles.billRow}>
-              <Text style={styles.billLabel}>Delivery Fee</Text>
-              <Text style={styles.billValueFree}>FREE</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.billRow}>
-              <Text style={styles.grandTotalLabel}>Grand Total</Text>
-              <Text style={styles.grandTotalValue}>₹{totalAmount}</Text>
-            </View>
+        <View style={styles.billContainer}>
+          <Text style={styles.billHeader}>Bill Details</Text>
+          <View style={styles.billRow}>
+            <Text style={styles.billLabel}>Item Total</Text>
+            <Text style={styles.billValue}>NPR {cartTotal}</Text>
           </View>
-        )}
+          <View style={styles.billRow}>
+            <Text style={styles.billLabel}>Delivery Fee</Text>
+            <Text
+              style={[
+                styles.billValue,
+                deliveryFee === 0 && { color: COLORS.success || "#27AE60" },
+              ]}
+            >
+              {deliveryFee === 0 ? "FREE" : `NPR ${deliveryFee}`}
+            </Text>
+          </View>
+          {deliveryFee > 0 && (
+            <Text style={styles.freeDeliveryHint}>
+              Add NPR {500 - cartTotal} more for FREE delivery!
+            </Text>
+          )}
+          <View style={styles.divider} />
+          <View style={styles.billRow}>
+            <Text style={styles.grandTotalLabel}>To Pay</Text>
+            <Text style={styles.grandTotalValue}>NPR {grandTotal}</Text>
+          </View>
+        </View>
       </ScrollView>
 
-      {/* 4. Sticky Checkout Bar */}
-      {totalItems > 0 && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            activeOpacity={0.8}
-            onPress={() => router.push("/cart/checkout")} // We will build this next!
-          >
-            <Text style={styles.checkoutText}>Proceed to Checkout</Text>
-            <Text style={styles.checkoutPrice}>₹{totalAmount}</Text>
-          </TouchableOpacity>
+      <View style={styles.bottomBar}>
+        <View style={styles.bottomTotalBox}>
+          <Text style={styles.bottomTotalLabel}>Total Amount</Text>
+          <Text style={styles.bottomTotalValue}>NPR {grandTotal}</Text>
         </View>
-      )}
+        <TouchableOpacity
+          style={styles.checkoutBtn}
+          activeOpacity={0.8}
+          onPress={() => router.push("/cart/checkout")}
+        >
+          <Text style={styles.checkoutText}>PROCEED</Text>
+          <Feather name="chevron-right" size={18} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* 🔥 NEW: Custom Confirmation Modal for Deleting Items */}
+      <Modal visible={showConfirmModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View
+              style={[styles.modalIconWrapper, { backgroundColor: "#FFF0F0" }]}
+            >
+              <Feather name="trash-2" size={32} color={COLORS.primary} />
+            </View>
+            <Text style={styles.modalTitle}>Remove Item?</Text>
+            <Text style={styles.modalMessage}>
+              Are you sure you want to remove{" "}
+              <Text style={{ fontWeight: "800" }}>{itemToRemove?.name}</Text>{" "}
+              from your cart?
+            </Text>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowConfirmModal(false)}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={confirmRemove}
+              >
+                <Text style={styles.modalConfirmBtnText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.m,
+    padding: SPACING.m,
     backgroundColor: COLORS.card,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderColor: COLORS.border,
   },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  headerTitleContainer: {
-    alignItems: "center",
-  },
+  backBtn: { padding: SPACING.xs },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
     color: COLORS.text,
+    flex: 1,
+    textAlign: "center",
+    textTransform: "uppercase",
   },
-  headerSubtitle: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  placeholder: {
-    width: 32, // Matches back button width to center title
-  },
-  scrollContent: {
-    paddingBottom: 120, // Clearance for sticky bottom bar
-  },
-  cartList: {
-    backgroundColor: COLORS.card,
-    paddingHorizontal: SPACING.m,
-    marginBottom: SPACING.m,
-  },
-  cartItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: SPACING.m,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  itemImageContainer: {
-    width: 60,
-    height: 60,
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.small,
+  scrollContent: { paddingBottom: 100 },
+  emptyContainer: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.xs,
+    padding: SPACING.xl,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#FFF0F0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: SPACING.m,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: SPACING.l,
+  },
+  shopNowBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+  },
+  shopNowText: {
+    color: "#FFF",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  itemsContainer: { padding: SPACING.m, gap: SPACING.m },
+  cartItem: {
+    flexDirection: "row",
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.large,
+    padding: SPACING.m,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  itemImageWrapper: {
+    width: 70,
+    height: 70,
+    backgroundColor: "#F8F8F8",
+    borderRadius: RADIUS.medium,
+    padding: 8,
     marginRight: SPACING.m,
   },
-  itemImage: {
-    width: "100%",
-    height: "100%",
-  },
-  itemDetails: {
-    flex: 1,
-  },
+  itemImage: { width: "100%", height: "100%" },
+  itemInfo: { flex: 1, justifyContent: "center" },
   itemName: {
     fontSize: 14,
     fontWeight: "800",
     color: COLORS.text,
-    marginBottom: 2,
-  },
-  itemSize: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
     marginBottom: 4,
   },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: COLORS.text,
+  itemSize: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    marginBottom: 4,
   },
-  counterPill: {
+  planBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.small,
+    backgroundColor: "#FFF0F0",
+    alignSelf: "flex-start",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  planBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginLeft: 4,
+  },
+  itemPrice: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: COLORS.text,
+    marginTop: 2,
+  },
+  actionColumn: { justifyContent: "space-between", alignItems: "flex-end" },
+  trashBtn: { padding: 4 },
+  quantitySelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F8F8",
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
+    borderRadius: RADIUS.small,
   },
-  counterBtn: {
-    padding: SPACING.s,
-    paddingHorizontal: 12,
-  },
-  counterText: {
+  qtyBtn: { padding: 8 },
+  qtyText: {
     fontSize: 14,
     fontWeight: "800",
     color: COLORS.text,
+    width: 20,
+    textAlign: "center",
   },
   billContainer: {
     backgroundColor: COLORS.card,
-    padding: SPACING.m,
-    marginHorizontal: SPACING.m,
+    margin: SPACING.m,
+    padding: SPACING.l,
     borderRadius: RADIUS.large,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+  billHeader: {
+    fontSize: 16,
+    fontWeight: "900",
     color: COLORS.text,
     marginBottom: SPACING.m,
   },
@@ -302,70 +393,117 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: SPACING.s,
   },
-  billLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-  billValue: {
-    fontSize: 13,
-    color: COLORS.text,
-    fontWeight: "700",
-  },
-  billValueFree: {
-    fontSize: 13,
-    color: COLORS.success,
-    fontWeight: "800",
+  billLabel: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
+  billValue: { fontSize: 13, color: COLORS.text, fontWeight: "700" },
+  freeDeliveryHint: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: "600",
+    textAlign: "right",
+    marginTop: -4,
+    marginBottom: 8,
   },
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
     marginVertical: SPACING.m,
   },
-  grandTotalLabel: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: COLORS.text,
-  },
-  grandTotalValue: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: COLORS.text,
-  },
+  grandTotalLabel: { fontSize: 15, fontWeight: "900", color: COLORS.text },
+  grandTotalValue: { fontSize: 16, fontWeight: "900", color: COLORS.text },
   bottomBar: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: COLORS.card,
-    paddingHorizontal: SPACING.m,
-    paddingTop: SPACING.m,
-    paddingBottom: 30, // Safe area for home indicator
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: SPACING.m,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    elevation: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
-    elevation: 10,
   },
-  checkoutButton: {
+  bottomTotalBox: { flex: 1 },
+  bottomTotalLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  bottomTotalValue: { fontSize: 18, fontWeight: "900", color: COLORS.text },
+  checkoutBtn: {
     backgroundColor: COLORS.primary,
-    height: 54,
-    borderRadius: RADIUS.medium,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: SPACING.l,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    gap: 4,
   },
   checkoutText: {
     color: "#FFF",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  checkoutPrice: {
-    color: "#FFF",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "900",
+    letterSpacing: 1,
   },
+
+  // 🔥 Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: SPACING.xl,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#FFF",
+    borderRadius: RADIUS.large,
+    padding: SPACING.xl,
+    alignItems: "center",
+  },
+  modalIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: SPACING.l,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.text,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: SPACING.xl,
+  },
+  modalBtnRow: { flexDirection: "row", gap: SPACING.m, width: "100%" },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+  },
+  modalCancelBtnText: { color: COLORS.text, fontSize: 14, fontWeight: "800" },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+  },
+  modalConfirmBtnText: { color: "#FFF", fontSize: 14, fontWeight: "800" },
 });
