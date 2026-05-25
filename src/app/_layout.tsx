@@ -1,12 +1,59 @@
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
-import { COLORS } from "../constants/theme";
-import { CartProvider } from "../context/CartContext"; // <-- 1. Import your Cart Provider
+import React, { useState, useEffect, createContext, useContext } from "react";
+import { COLORS } from "../constants/theme"; 
+import { CartProvider } from "../context/CartContext";
 
-export default function RootLayout() {
-  // 2. Wrap everything in CartProvider so the whole app shares the same memory
+interface UserProfile {
+  name: string;
+  email: string;
+  phone: string;
+}
+
+const AuthContext = createContext<{
+  isAuthenticated: boolean;
+  user: UserProfile | null;
+  login: (userData: UserProfile) => void;
+  logout: () => void;
+}>({ isAuthenticated: false, user: null, login: () => {}, logout: () => {} });
+
+export const useAuth = () => useContext(AuthContext);
+
+function AuthProtectedLayout() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const segments = useSegments();
+  const router = useRouter();
+
+  const login = (userData: UserProfile) => {
+    setUser(userData);
+    setIsAuthenticated(true);
+  };
+  
+  const logout = () => {
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const inAuthGroup = segments[0] === "auth";
+
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace("/auth/login");
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace("/(tabs)");
+    }
+  }, [isAuthenticated, segments, isReady]);
+
   return (
-    <CartProvider>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
       {Platform.OS === "web" ? (
         <View style={styles.webDesktopBackground}>
           <View style={styles.mobileMockupContainer}>
@@ -16,6 +63,14 @@ export default function RootLayout() {
       ) : (
         <Stack screenOptions={{ headerShown: false }} />
       )}
+    </AuthContext.Provider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <CartProvider>
+      <AuthProtectedLayout />
     </CartProvider>
   );
 }

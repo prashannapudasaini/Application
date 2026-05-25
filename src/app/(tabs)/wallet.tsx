@@ -30,7 +30,6 @@ export default function WalletScreen() {
     setShowSuccessModal(true);
   };
 
-  // Determine if they qualify for the bonus text hint
   const currentInputAmount = parseInt(customAmount) || 0;
   const qualifiesForBonus = currentInputAmount >= 2000;
 
@@ -44,7 +43,7 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Balance Card */}
+        {/* Balance Card - Restyled to Deep Dark Red */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
           <Text style={styles.balanceAmount}>
@@ -54,7 +53,7 @@ export default function WalletScreen() {
             <MaterialCommunityIcons
               name="wallet-outline"
               size={48}
-              color="rgba(255,255,255,0.2)"
+              color="rgba(255,255,255,0.15)"
             />
           </View>
         </View>
@@ -94,6 +93,7 @@ export default function WalletScreen() {
               keyboardType="numeric"
               value={customAmount}
               onChangeText={setCustomAmount}
+              placeholderTextColor="#888"
             />
           </View>
 
@@ -149,34 +149,39 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: "#FAF8F5" }, // Warm application theme layout
   header: {
     padding: SPACING.m,
-    backgroundColor: COLORS.card,
+    backgroundColor: "#FAF8F5",
     borderBottomWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#EAEAEA",
     alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: COLORS.text,
+    color: "#1A1A1A",
     textTransform: "uppercase",
   },
   scrollContent: { padding: SPACING.m, paddingBottom: 100 },
 
+  // 🌟 Balance Card Updated to Corporate Dark Red Palette
   balanceCard: {
-    backgroundColor: "#001F3F",
+    backgroundColor: "#800000",
     borderRadius: RADIUS.large,
     padding: SPACING.xl,
     marginBottom: SPACING.l,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     elevation: 4,
   },
   balanceLabel: {
-    color: "rgba(255,255,255,0.7)",
+    color: "rgba(255,255,255,0.75)",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     marginBottom: 4,
   },
   balanceAmount: { color: "#FFF", fontSize: 32, fontWeight: "900" },
@@ -188,16 +193,16 @@ const styles = StyleSheet.create({
   },
 
   section: {
-    backgroundColor: COLORS.card,
+    backgroundColor: "#FFF",
     borderRadius: RADIUS.large,
     padding: SPACING.m,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#F0F0F0",
   },
-  sectionTitle: { fontSize: 16, fontWeight: "900", color: COLORS.text },
+  sectionTitle: { fontSize: 16, fontWeight: "900", color: "#1A1A1A" },
   sectionSubtitle: {
-    fontSize: 12,
-    color: COLORS.primary,
+    fontSize: 13,
+    color: "#800000", // Dark Red accent for contextual hints
     fontWeight: "700",
     marginBottom: SPACING.m,
     marginTop: 2,
@@ -214,16 +219,17 @@ const styles = StyleSheet.create({
     minWidth: "45%",
     backgroundColor: "#F8F8F8",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#EAEAEA",
     borderRadius: RADIUS.medium,
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
   },
   quickAddText: {
     fontSize: 14,
     fontWeight: "800",
-    color: COLORS.textSecondary,
+    color: "#555",
   },
   bonusBadge: {
     position: "absolute",
@@ -233,6 +239,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    zIndex: 2,
   },
   bonusBadgeText: { color: "#FFF", fontSize: 9, fontWeight: "900" },
 
@@ -240,7 +247,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#EAEAEA",
     borderRadius: RADIUS.medium,
     paddingHorizontal: SPACING.m,
     backgroundColor: "#FAFAFA",
@@ -248,14 +255,14 @@ const styles = StyleSheet.create({
   currencyPrefix: {
     fontSize: 16,
     fontWeight: "800",
-    color: COLORS.textSecondary,
+    color: "#555",
     marginRight: 8,
   },
   input: {
     flex: 1,
     fontSize: 18,
     fontWeight: "800",
-    color: COLORS.text,
+    color: "#1A1A1A",
     paddingVertical: 14,
   },
   bonusHintText: {
@@ -267,7 +274,7 @@ const styles = StyleSheet.create({
   },
 
   loadBtn: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#800000", // Dark Red interaction button configuration
     borderRadius: RADIUS.medium,
     paddingVertical: 16,
     alignItems: "center",
@@ -281,7 +288,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
@@ -309,13 +315,13 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: "900",
-    color: COLORS.text,
+    color: "#1A1A1A",
     marginBottom: 8,
     textAlign: "center",
   },
   modalMessage: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: "#555",
     textAlign: "center",
     lineHeight: 22,
     marginBottom: SPACING.xl,
@@ -325,7 +331,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: RADIUS.medium,
     alignItems: "center",
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#800000", // Unified dark red confirmation link
   },
   modalConfirmBtnText: { color: "#FFF", fontSize: 14, fontWeight: "800" },
 });
