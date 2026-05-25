@@ -1,8 +1,8 @@
 import { Stack, useRouter, useSegments } from "expo-router";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import React, { useState, useEffect, createContext, useContext } from "react";
-import { COLORS } from "../constants/theme"; 
-import { CartProvider } from "../context/CartContext";
+import { COLORS } from "../constants/theme";
+import { CartProvider } from "../context/CartContext"; // 🔥 Ensures Cart Context is loaded
 
 interface UserProfile {
   name: string;
@@ -30,7 +30,7 @@ function AuthProtectedLayout() {
     setUser(userData);
     setIsAuthenticated(true);
   };
-  
+
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
@@ -67,6 +67,7 @@ function AuthProtectedLayout() {
   );
 }
 
+// 🔥 CRITICAL FIX: The CartProvider must wrap the AuthProtectedLayout
 export default function RootLayout() {
   return (
     <CartProvider>

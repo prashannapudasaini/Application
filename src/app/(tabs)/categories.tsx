@@ -1,44 +1,40 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BASE_URL, getImageUrl } from "../../constants/api";
-import { COLORS, SPACING } from "../../constants/theme";
+import { API_ENDPOINTS } from "../../constants/api";
+import { RADIUS, SPACING } from "../../constants/theme";
 
-// Matches standard category data structure
-interface Category {
+// 🔥 The UI Matrix: Pairs colors with relevant icons to wrap dynamic data
+const UI_MATRIX = [
+  { icon: "bottle-wine-outline", bgColor: "#EAF4F4", iconColor: "#008080" },
+  { icon: "cup-water", bgColor: "#E8F5E9", iconColor: "#2E7D32" },
+  { icon: "cube-outline", bgColor: "#FFF9E6", iconColor: "#F57F17" },
+  { icon: "cheese", bgColor: "#FFECE6", iconColor: "#D84315" },
+  { icon: "bowl-outline", bgColor: "#F4E9F5", iconColor: "#6A1B9A" },
+  { icon: "pot-mix-outline", bgColor: "#FFF3E0", iconColor: "#E65100" },
+  { icon: "cupcake", bgColor: "#FCE4EC", iconColor: "#C2185B" },
+  { icon: "ice-cream", bgColor: "#E3F2FD", iconColor: "#1565C0" },
+];
+
+interface DynamicCategory {
   id: string;
   name: string;
-  image: string | null;
+  itemCount: number; // Defaults to 0 if API doesn't provide it
 }
-
-// Beautiful stock images as fallbacks just in case your DB is missing images
-const FALLBACK_IMAGES: Record<string, string> = {
-  default:
-    "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=400&q=80",
-  milk: "https://images.unsplash.com/photo-1563636619-e9143da7973b?auto=format&fit=crop&w=400&q=80",
-  paneer:
-    "https://images.unsplash.com/photo-1631451095765-2c91616fc9e6?auto=format&fit=crop&w=400&q=80",
-  ghee: "https://images.unsplash.com/photo-1605297833075-84ab8e833441?auto=format&fit=crop&w=400&q=80",
-  curd: "https://images.unsplash.com/photo-1571115177098-24ec42ed204d?auto=format&fit=crop&w=400&q=80",
-  butter:
-    "https://images.unsplash.com/photo-1589131744924-b8f882414712?auto=format&fit=crop&w=400&q=80",
-};
 
 export default function CategoriesScreen() {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<DynamicCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchCategories();
@@ -46,232 +42,167 @@ export default function CategoriesScreen() {
 
   const fetchCategories = async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      // Fetching from your standard API structure
-      const response = await fetch(`${BASE_URL}/api/categories/index.php`);
+      setIsLoading(true);
+      const response = await fetch(API_ENDPOINTS.CATEGORIES);
       const json = await response.json();
 
-      if (json.status === "success") {
-        setCategories(json.data);
-      } else {
-        loadFallbackData();
+      if (json.status === "success" || json.data) {
+        const mappedData = json.data.map((item: any) => ({
+          id: item.id.toString(),
+          name: item.name,
+          itemCount: item.product_count || 0, // Maps product count if available
+        }));
+        setCategories(mappedData);
       }
-    } catch (err) {
-      console.error("Category Fetch Error:", err);
-      loadFallbackData();
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const loadFallbackData = () => {
-    setCategories([
-      { id: "1", name: "Fresh Milk", image: null },
-      { id: "2", name: "Paneer & Tofu", image: null },
-      { id: "3", name: "Pure Ghee", image: null },
-      { id: "4", name: "Curd & Yogurt", image: null },
-      { id: "5", name: "Dairy Butter", image: null },
-      { id: "6", name: "Sweets", image: null },
-    ]);
+  const renderCategoryCard = ({
+    item,
+    index,
+  }: {
+    item: DynamicCategory;
+    index: number;
+  }) => {
+    // Loop through the UI matrix based on the index to assign styling
+    const design = UI_MATRIX[index % UI_MATRIX.length];
+
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.8}
+        onPress={() => console.log(`Navigating to category: ${item.name}`)}
+      >
+        <View
+          style={[styles.iconContainer, { backgroundColor: design.bgColor }]}
+        >
+          <MaterialCommunityIcons
+            name={design.icon as any}
+            size={32}
+            color={design.iconColor}
+          />
+        </View>
+        <View style={styles.cardTextContainer}>
+          <Text style={styles.categoryName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={styles.itemCount}>
+            {item.itemCount > 0 ? `${item.itemCount} Items` : "View Products"}
+          </Text>
+        </View>
+
+        <View style={styles.arrowBox}>
+          <Feather name="chevron-right" size={16} color="#800000" />
+        </View>
+      </TouchableOpacity>
+    );
   };
-
-  // Smart image resolver
-  const resolveImage = (catName: string, dbImage: string | null) => {
-    if (dbImage && dbImage.length > 5) {
-      return { uri: getImageUrl(dbImage) };
-    }
-
-    const nameLower = catName.toLowerCase();
-    if (nameLower.includes("milk")) return { uri: FALLBACK_IMAGES.milk };
-    if (nameLower.includes("paneer") || nameLower.includes("cheese"))
-      return { uri: FALLBACK_IMAGES.paneer };
-    if (nameLower.includes("ghee")) return { uri: FALLBACK_IMAGES.ghee };
-    if (nameLower.includes("curd") || nameLower.includes("yogurt"))
-      return { uri: FALLBACK_IMAGES.curd };
-    if (nameLower.includes("butter")) return { uri: FALLBACK_IMAGES.butter };
-
-    return { uri: FALLBACK_IMAGES.default };
-  };
-
-  const renderCategory = ({ item }: { item: Category }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.9}
-      onPress={() =>
-        router.push({
-          pathname: "/category/[id]",
-          params: { id: item.id, name: item.name },
-        })
-      }
-    >
-      <View style={styles.imageContainer}>
-        <Image
-          source={resolveImage(item.name, item.image)}
-          style={styles.image}
-          resizeMode="cover"
-        />
-        <View style={styles.imageOverlay} />
-      </View>
-      <View style={styles.cardBody}>
-        <Text style={styles.categoryName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Feather name="chevron-right" size={18} color="#A11217" />
-      </View>
-    </TouchableOpacity>
-  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* 🌟 Redesigned Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>All Categories</Text>
+        <Text style={styles.headerTitle}>Shop by Category</Text>
+        <TouchableOpacity
+          style={styles.searchBtn}
+          onPress={() => router.push("/(tabs)")}
+        >
+          <Feather name="search" size={20} color="#1A1A1A" />
+        </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        {loading ? (
-          <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color="#A11217" />
-            <Text style={styles.loadingText}>Loading categories...</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={categories}
-            keyExtractor={(item) => item.id.toString()}
-            numColumns={2}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.gridContainer}
-            columnWrapperStyle={styles.rowWrapper}
-            renderItem={renderCategory}
-            ListEmptyComponent={
-              <View style={styles.centerBox}>
-                <Text style={styles.errorText}>No categories found.</Text>
-                <TouchableOpacity
-                  onPress={fetchCategories}
-                  style={styles.retryBtn}
-                >
-                  <Text style={styles.retryText}>Refresh</Text>
-                </TouchableOpacity>
-              </View>
-            }
-          />
-        )}
-      </View>
+      {isLoading ? (
+        <View style={styles.centerBox}>
+          <ActivityIndicator size="large" color="#800000" />
+        </View>
+      ) : categories.length === 0 ? (
+        <View style={styles.centerBox}>
+          <Text style={styles.emptyText}>No categories available.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={categories}
+          keyExtractor={(item) => item.id}
+          renderItem={renderCategoryCard}
+          numColumns={2}
+          contentContainerStyle={styles.listContent}
+          columnWrapperStyle={styles.columnWrapper}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FAF8F5", // Warm Sitaram Background
-  },
-
+  container: { flex: 1, backgroundColor: "#FAF8F5" },
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: SPACING.m,
     paddingVertical: SPACING.m,
     backgroundColor: "#FAF8F5",
     borderBottomWidth: 1,
     borderColor: "#EAEAEA",
+  },
+  headerTitle: { fontSize: 24, fontWeight: "900", color: "#1A1A1A" },
+  searchBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#EAEAEA",
     alignItems: "center",
+    justifyContent: "center",
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#1A1A1A",
-    textTransform: "uppercase",
-  },
-
-  content: {
-    flex: 1,
-  },
-  gridContainer: {
-    padding: SPACING.m,
-    paddingBottom: 100,
-  },
-  rowWrapper: {
-    justifyContent: "space-between",
-    marginBottom: SPACING.m,
-  },
-
-  // 🌟 Premium Card Styles
+  listContent: { padding: SPACING.m, paddingBottom: 100 },
+  columnWrapper: { justifyContent: "space-between", marginBottom: SPACING.m },
   card: {
     width: "48%",
     backgroundColor: "#FFF",
-    borderRadius: 24, // High rounded corners
-    overflow: "hidden",
+    borderRadius: RADIUS.large,
+    padding: SPACING.m,
     borderWidth: 1,
     borderColor: "#F0F0F0",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 2,
-  },
-  imageContainer: {
-    width: "100%",
-    height: 140,
-    backgroundColor: "#F8F8F8",
     position: "relative",
   },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
-  imageOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 40,
-    backgroundColor: "rgba(0,0,0,0.03)",
-  },
-  cardBody: {
-    flexDirection: "row",
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: SPACING.m,
-  },
-  categoryName: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#1A1A1A",
-    marginRight: SPACING.xs,
-  },
-
-  // State Styles
-  centerBox: {
-    flex: 1,
     justifyContent: "center",
-    alignItems: "center",
-    padding: SPACING.xl,
-    marginTop: 100,
-  },
-  loadingText: {
-    marginTop: SPACING.m,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  errorText: {
-    color: COLORS.textSecondary,
     marginBottom: SPACING.m,
-    fontWeight: "600",
+  },
+  cardTextContainer: { marginBottom: 4 },
+  categoryName: {
     fontSize: 15,
+    fontWeight: "800",
+    color: "#1A1A1A",
+    marginBottom: 4,
   },
-  retryBtn: {
-    backgroundColor: "#800000", // Dark red
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
+  itemCount: { fontSize: 12, fontWeight: "600", color: "#888" },
+  arrowBox: {
+    position: "absolute",
+    bottom: SPACING.m,
+    right: SPACING.m,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FFF0F0",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  retryText: {
-    color: "#FFF",
-    fontWeight: "900",
-    fontSize: 14,
-  },
+  centerBox: { flex: 1, alignItems: "center", justifyContent: "center" },
+  emptyText: { color: "#666", fontSize: 15, fontWeight: "600" },
 });

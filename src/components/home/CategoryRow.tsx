@@ -2,37 +2,34 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
-import { API_ENDPOINTS, getImageUrl } from "../../constants/api";
-import { COLORS, SPACING } from "../../constants/theme";
+import { API_ENDPOINTS } from "../../constants/api";
+import { SPACING } from "../../constants/theme";
 
-const PASTEL_COLORS = ["#E8F5E9", "#FFF9E6", "#FFF0E6", "#F3E5F5", "#F0F8FF"];
+// 🔥 The Design Matrix: Keeps the UI beautiful regardless of what the DB sends
+const PASTEL_PALETTE = [
+  "#EAF4F4", // Soft Cyan
+  "#E8F5E9", // Soft Green
+  "#FFF9E6", // Soft Yellow
+  "#FFECE6", // Soft Peach
+  "#F4E9F5", // Soft Purple
+  "#FFF3E0", // Soft Orange
+];
 
 interface Category {
   id: string;
   name: string;
-  image: string;
 }
-
-// Fallback image generator
-const getRelevantImageUrl = (categoryName: string): string => {
-  const query = encodeURIComponent(`${categoryName} food`);
-  return `https://source.unsplash.com/featured/80x80?${query}`;
-};
 
 export default function CategoryRow() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Used to track images that fail to load
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchCategories();
@@ -40,78 +37,65 @@ export default function CategoryRow() {
 
   const fetchCategories = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(API_ENDPOINTS.CATEGORIES);
       const json = await response.json();
-      if (json.status === "success") {
-        const mappedCats = json.data.map((item: any) => ({
+
+      if (json.status === "success" || json.data) {
+        // Adjust json.data depending on your exact API response structure
+        const mappedData = json.data.map((item: any) => ({
           id: item.id.toString(),
-          name: item.name || item.title,
-          image: getImageUrl(item.image),
+          name: item.name,
         }));
-        setCategories(mappedCats);
+        setCategories(mappedData);
       }
-    } catch (err) {
-      console.error("Category Fetch Error:", err);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleCategoryPress = (categoryName: string) => {
+    router.push(`/(tabs)/categories?selected=${categoryName}`);
+  };
+
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.loadingCenter]}>
-        <ActivityIndicator color={COLORS.primary} />
+      <View
+        style={[styles.container, { justifyContent: "center", height: 100 }]}
+      >
+        <ActivityIndicator size="small" color="#800000" />
       </View>
     );
   }
+
+  // Hide entirely if no categories exist in the DB
+  if (categories.length === 0) return null;
 
   return (
     <View style={styles.container}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollPadding}
+        contentContainerStyle={styles.scrollContent}
       >
-        {categories.map((cat, index) => {
-          const bgColor = PASTEL_COLORS[index % PASTEL_COLORS.length];
-
-          // Determine which image to show
-          const apiImage = cat.image?.trim();
-          const hasFailed = failedImages[cat.id];
-          const imageUrl =
-            !hasFailed && apiImage ? apiImage : getRelevantImageUrl(cat.name);
+        {categories.map((category, index) => {
+          // Use modulo to endlessly loop through the colors if you have many categories
+          const bgColor = PASTEL_PALETTE[index % PASTEL_PALETTE.length];
 
           return (
-            <Pressable
-              key={cat.id}
-              style={styles.categoryCard}
-              android_ripple={{ color: "rgba(0,0,0,0.05)", radius: 35 }}
-              onPress={() =>
-                // 🔥 FIX: Correct routing to the Category Products screen we just built
-                router.push({
-                  pathname: `/category/[id]`,
-                  params: { id: cat.id, name: cat.name },
-                })
-              }
+            <TouchableOpacity
+              key={category.id}
+              style={styles.categoryItem}
+              activeOpacity={0.7}
+              onPress={() => handleCategoryPress(category.name)}
             >
-              <View
-                style={[styles.iconContainer, { backgroundColor: bgColor }]}
-              >
-                {/* Clean, cross-platform Image component */}
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={styles.categoryImage}
-                  resizeMode="contain"
-                  onError={() => {
-                    // If the primary image fails, mark it so it falls back to Unsplash
-                    setFailedImages((prev) => ({ ...prev, [cat.id]: true }));
-                  }}
-                />
-              </View>
+              <View style={[styles.circle, { backgroundColor: bgColor }]} />
               <Text style={styles.categoryName} numberOfLines={1}>
-                {cat.name}
+                {category.name}
               </Text>
-            </Pressable>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
@@ -120,32 +104,24 @@ export default function CategoryRow() {
 }
 
 const styles = StyleSheet.create({
-  container: { marginTop: SPACING.l },
-  loadingCenter: {
-    justifyContent: "center",
-    alignItems: "center",
-    height: 100,
-  },
-  scrollPadding: { paddingHorizontal: SPACING.m, gap: SPACING.l },
-
-  categoryCard: { alignItems: "center", width: 68 },
-  iconContainer: {
+  container: { marginTop: SPACING.l, marginBottom: SPACING.s },
+  scrollContent: { paddingHorizontal: SPACING.m, gap: 16 },
+  categoryItem: { alignItems: "center", width: 72 },
+  circle: {
     width: 68,
     height: 68,
-    borderRadius: 34, // Exactly half of width/height for a perfect circle
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  categoryImage: {
-    width: 40,
-    height: 40,
+    borderRadius: 34,
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   categoryName: {
     fontSize: 12,
-    fontWeight: "800",
-    color: "#1A1A1A", // Matches the new Sitaram text color
-    marginTop: SPACING.s,
+    fontWeight: "900",
+    color: "#1A1A1A",
     textAlign: "center",
   },
 });

@@ -2,6 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
   Image,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -9,22 +10,26 @@ import {
   View,
 } from "react-native";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
-import { useCart } from "../../context/CartContext"; // 🔥 1. Import your Cart Context
+import { useCart } from "../../context/CartContext";
 
-export default function HomeHeader() {
+// 🔥 1. Define props so the Home Screen can control the search text
+interface HomeHeaderProps {
+  searchQuery?: string;
+  onSearchChange?: (text: string) => void;
+}
+
+export default function HomeHeader({
+  searchQuery = "",
+  onSearchChange,
+}: HomeHeaderProps) {
   const router = useRouter();
-
-  // 🔥 2. Pull the live data from the global engine
   const { items, walletBalance } = useCart();
 
-  // 🔥 3. Calculate exactly how many items are in the cart
   const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
 
   return (
     <View style={styles.container}>
-      {/* Top Row: Logo & Actions (Cart + Wallet) */}
       <View style={styles.topRow}>
-        {/* Left Side: Logo */}
         <View style={styles.logoContainer}>
           <Image
             source={require("../../../assets/images/logo.png")}
@@ -33,17 +38,13 @@ export default function HomeHeader() {
           />
         </View>
 
-        {/* Right Side: Cart & Wallet */}
         <View style={styles.actionsContainer}>
-          {/* Cart Icon - Navigates to /cart */}
           <TouchableOpacity
             style={styles.cartButton}
             activeOpacity={0.8}
             onPress={() => router.push("/cart")}
           >
             <Feather name="shopping-cart" size={22} color={COLORS.text} />
-
-            {/* 🔥 4. Only show the badge if there is at least 1 item in the cart */}
             {cartItemCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{cartItemCount}</Text>
@@ -51,14 +52,12 @@ export default function HomeHeader() {
             )}
           </TouchableOpacity>
 
-          {/* Wallet Pill - Navigates to /wallet */}
           <TouchableOpacity
             style={styles.walletPill}
             activeOpacity={0.8}
             onPress={() => router.push("/wallet")}
           >
             <Ionicons name="wallet-outline" size={14} color={COLORS.primary} />
-            {/* 🔥 5. Dynamic Wallet Balance */}
             <Text style={styles.walletText}>
               NPR {walletBalance.toLocaleString()}
             </Text>
@@ -66,7 +65,6 @@ export default function HomeHeader() {
         </View>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Feather
           name="search"
@@ -76,8 +74,15 @@ export default function HomeHeader() {
         />
         <TextInput
           placeholder="Search for milk, paneer, ghee..."
-          style={styles.searchInput}
+          // 🔥 2. Bind the input to the props passed from HomeScreen
+          value={searchQuery}
+          onChangeText={onSearchChange}
+          style={[
+            styles.searchInput,
+            Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+          ]}
           placeholderTextColor={COLORS.textSecondary}
+          clearButtonMode="while-editing" // Adds a handy 'x' button on iOS to clear search
         />
       </View>
     </View>
@@ -176,6 +181,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: COLORS.text,
-    fontWeight: "500",
+    fontWeight: "normal",
   },
 });
