@@ -14,49 +14,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
 import { useCart } from "../../context/CartContext";
 
-const PAYMENT_METHODS = [
-  {
-    id: "cod",
-    title: "Cash on Delivery",
-    icon: "cash",
-    desc: "Pay when your order arrives",
-  },
-  {
-    id: "wallet",
-    title: "Digital Wallet",
-    icon: "wallet-outline",
-    desc: "eSewa, Khalti, or IME Pay",
-  },
-  {
-    id: "card",
-    title: "Credit / Debit Card",
-    icon: "credit-card-outline",
-    desc: "Visa, MasterCard",
-  },
-];
-
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { items, cartTotal, placeOrder } = useCart();
+  const { items, cartTotal, placeOrder, walletBalance } = useCart(); // 🔥 Imported walletBalance
 
   const [selectedPayment, setSelectedPayment] = useState("cod");
-
-  // 🔥 NEW: State to control our custom success popup
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false); // 🔥 Handles insufficient funds
 
   if (items.length === 0 && !showSuccessModal) {
-    if (Platform.OS !== "web") {
-      router.replace("/cart");
-    }
+    if (Platform.OS !== "web") router.replace("/cart");
     return (
       <View style={[styles.container, styles.center]}>
         <Text style={styles.emptyText}>Your cart is empty.</Text>
-        <TouchableOpacity
-          onPress={() => router.replace("/(tabs)")}
-          style={styles.returnBtn}
-        >
-          <Text style={styles.returnBtnText}>Go to Shop</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -64,15 +34,41 @@ export default function CheckoutScreen() {
   const deliveryFee = cartTotal > 500 ? 0 : 50;
   const grandTotal = cartTotal + deliveryFee;
 
-  // 🔥 NEW: Simply trigger the modal instead of browser alerts
+  const PAYMENT_METHODS = [
+    {
+      id: "cod",
+      title: "Cash on Delivery",
+      icon: "cash",
+      desc: "Pay when your order arrives",
+    },
+    {
+      id: "wallet",
+      title: `Sitaram Wallet (Bal: NPR ${walletBalance.toLocaleString()})`,
+      icon: "wallet-outline",
+      desc: "Fast & Secure checkout",
+    },
+    {
+      id: "card",
+      title: "Credit / Debit Card",
+      icon: "credit-card-outline",
+      desc: "Visa, MasterCard",
+    },
+  ];
+
   const handlePlaceOrder = () => {
-    placeOrder(grandTotal); // Process order in the background
-    setShowSuccessModal(true); // Show our beautiful custom UI
+    // 🔥 Check if they chose wallet but don't have enough money
+    if (selectedPayment === "wallet" && walletBalance < grandTotal) {
+      setShowErrorModal(true);
+      return;
+    }
+
+    placeOrder(grandTotal, selectedPayment);
+    setShowSuccessModal(true);
   };
 
   const handleFinishCheckout = () => {
     setShowSuccessModal(false);
-    router.replace("/(tabs)/orders"); // Route to orders after they click OK
+    router.replace("/(tabs)/orders");
   };
 
   return (
@@ -90,32 +86,7 @@ export default function CheckoutScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Delivery Address</Text>
-            <TouchableOpacity>
-              <Text style={styles.changeText}>Change</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.card}>
-            <View style={styles.addressRow}>
-              <View style={styles.iconCircle}>
-                <Feather name="map-pin" size={20} color={COLORS.primary} />
-              </View>
-              <View style={styles.addressInfo}>
-                <Text style={styles.addressName}>Prashant Sharma</Text>
-                <Text style={styles.addressText}>
-                  Lazimpat, Kathmandu, Bagmati Province
-                </Text>
-                <Text style={styles.addressPhone}>+977 980-0000000</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Order Summary ({items.length} items)
-          </Text>
+          <Text style={styles.sectionTitle}>Order Summary</Text>
           <View style={styles.card}>
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>Item Total</Text>
@@ -126,7 +97,7 @@ export default function CheckoutScreen() {
               <Text
                 style={[
                   styles.billValue,
-                  deliveryFee === 0 && { color: COLORS.success || "#27AE60" },
+                  deliveryFee === 0 && { color: "#27AE60" },
                 ]}
               >
                 {deliveryFee === 0 ? "FREE" : `NPR ${deliveryFee}`}
@@ -144,12 +115,17 @@ export default function CheckoutScreen() {
           <Text style={styles.sectionTitle}>Payment Method</Text>
           {PAYMENT_METHODS.map((method) => {
             const isActive = selectedPayment === method.id;
+            // Highlight red if they don't have enough balance for the wallet option
+            const isWalletError =
+              method.id === "wallet" && isActive && walletBalance < grandTotal;
+
             return (
               <TouchableOpacity
                 key={method.id}
                 style={[
                   styles.paymentCard,
                   isActive && styles.paymentCardActive,
+                  isWalletError && { borderColor: "red" },
                 ]}
                 activeOpacity={0.8}
                 onPress={() => setSelectedPayment(method.id)}
@@ -175,15 +151,30 @@ export default function CheckoutScreen() {
                   >
                     {method.title}
                   </Text>
-                  <Text style={styles.paymentDesc}>{method.desc}</Text>
+                  <Text
+                    style={[
+                      styles.paymentDesc,
+                      isWalletError && { color: "red" },
+                    ]}
+                  >
+                    {isWalletError ? "Insufficient Balance" : method.desc}
+                  </Text>
                 </View>
                 <View
                   style={[
                     styles.radioOuter,
                     isActive && styles.radioOuterActive,
+                    isWalletError && { borderColor: "red" },
                   ]}
                 >
-                  {isActive && <View style={styles.radioInner} />}
+                  {isActive && (
+                    <View
+                      style={[
+                        styles.radioInner,
+                        isWalletError && { backgroundColor: "red" },
+                      ]}
+                    />
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -206,18 +197,19 @@ export default function CheckoutScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 🔥 NEW: Custom Success Modal UI */}
+      {/* Success Modal */}
       <Modal visible={showSuccessModal} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <View style={styles.successIconWrapper}>
+            <View
+              style={[styles.modalIconWrapper, { backgroundColor: "#27AE60" }]}
+            >
               <Feather name="check" size={40} color="#FFF" />
             </View>
             <Text style={styles.modalTitle}>Order Confirmed!</Text>
             <Text style={styles.modalMessage}>
               Your order has been placed successfully.
             </Text>
-
             <TouchableOpacity
               style={styles.modalBtn}
               activeOpacity={0.8}
@@ -225,6 +217,47 @@ export default function CheckoutScreen() {
             >
               <Text style={styles.modalBtnText}>View My Orders</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🔥 Error Modal (Insufficient Funds) */}
+      <Modal visible={showErrorModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View
+              style={[styles.modalIconWrapper, { backgroundColor: "#FFF0F0" }]}
+            >
+              <Feather name="alert-circle" size={40} color={COLORS.primary} />
+            </View>
+            <Text style={styles.modalTitle}>Insufficient Balance</Text>
+            <Text style={styles.modalMessage}>
+              You do not have enough funds in your Sitaram Wallet to complete
+              this purchase.
+            </Text>
+
+            <View style={{ flexDirection: "row", gap: 10, width: "100%" }}>
+              <TouchableOpacity
+                style={[
+                  styles.modalBtn,
+                  { flex: 1, backgroundColor: "#F5F5F5" },
+                ]}
+                onPress={() => setShowErrorModal(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: COLORS.text }]}>
+                  Dismiss
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { flex: 1 }]}
+                onPress={() => {
+                  setShowErrorModal(false);
+                  router.push("/(tabs)/wallet"); // Route directly to wallet top up
+                }}
+              >
+                <Text style={styles.modalBtnText}>Top Up Now</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -240,14 +273,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.m,
   },
-  returnBtn: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: RADIUS.medium,
-  },
-  returnBtnText: { color: "#FFF", fontWeight: "800" },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -271,14 +296,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.m,
     paddingTop: SPACING.m,
   },
-
   section: { marginBottom: SPACING.l },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: SPACING.s,
-  },
   sectionTitle: {
     fontSize: 15,
     fontWeight: "900",
@@ -286,13 +304,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: SPACING.s,
   },
-  changeText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primary,
-    marginBottom: SPACING.s,
-  },
-
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.large,
@@ -300,31 +311,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  addressRow: { flexDirection: "row", alignItems: "flex-start" },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#F8F8F8",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: SPACING.m,
-  },
-  addressInfo: { flex: 1 },
-  addressName: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  addressText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  addressPhone: { fontSize: 13, fontWeight: "700", color: COLORS.text },
-
   billRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -339,7 +325,6 @@ const styles = StyleSheet.create({
   },
   grandTotalLabel: { fontSize: 15, fontWeight: "900", color: COLORS.text },
   grandTotalValue: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
-
   paymentCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -378,7 +363,15 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: COLORS.primary,
   },
-
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F8F8F8",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: SPACING.m,
+  },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -420,7 +413,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // 🔥 NEW: Modal Styles
+  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
@@ -436,16 +429,11 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
     alignItems: "center",
     elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
   },
-  successIconWrapper: {
+  modalIconWrapper: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#27AE60",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: SPACING.l,

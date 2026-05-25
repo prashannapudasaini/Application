@@ -18,12 +18,14 @@ export interface OrderItem {
   amount: number;
   items: string;
   image: string;
-  timestamp: number; // 🔥 NEW: Tracks exact time of order
+  timestamp: number;
 }
 
 interface CartContextType {
   items: CartItem[];
   orderHistory: OrderItem[];
+  walletBalance: number; // 🔥 NEW: Tracks user's digital money
+  loadWallet: (amount: number) => void; // 🔥 NEW: Handles adding money
   addToCart: (
     item: Omit<CartItem, "cartItemId" | "quantity"> & { quantity?: number },
   ) => void;
@@ -31,7 +33,7 @@ interface CartContextType {
   updateQuantity: (cartItemId: string, newQuantity: number) => void;
   clearCart: () => void;
   cartTotal: number;
-  placeOrder: (grandTotal: number) => string;
+  placeOrder: (grandTotal: number, paymentMethod: string) => string; // 🔥 Updated to accept payment method
   cancelOrder: (orderId: string) => void;
 }
 
@@ -40,6 +42,13 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderItem[]>([]);
+  const [walletBalance, setWalletBalance] = useState<number>(0); // Starts at NPR 0
+
+  // 🔥 NEW: Loads money and applies the 10% bonus if amount is 2000 or more
+  const loadWallet = (amount: number) => {
+    const bonus = amount >= 2000 ? amount * 0.1 : 0;
+    setWalletBalance((prev) => prev + amount + bonus);
+  };
 
   const addToCart = (
     newItem: Omit<CartItem, "cartItemId" | "quantity"> & { quantity?: number },
@@ -78,8 +87,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     0,
   );
 
-  const placeOrder = (grandTotal: number) => {
+  // 🔥 UPDATED: Deducts from wallet if that is the chosen payment method
+  const placeOrder = (grandTotal: number, paymentMethod: string) => {
     if (items.length === 0) return "";
+
+    // Safety check (handled in checkout UI too)
+    if (paymentMethod === "wallet") {
+      if (walletBalance < grandTotal) return "";
+      setWalletBalance((prev) => prev - grandTotal); // Deduct money
+    }
 
     const newOrderId = Math.floor(10000 + Math.random() * 90000).toString();
     const newOrder: OrderItem = {
@@ -93,7 +109,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       amount: grandTotal,
       items: items.map((i) => `${i.name} (${i.quantity})`).join(", "),
       image: items[0].image,
-      timestamp: Date.now(), // 🔥 NEW: Records the exact millisecond the order was placed
+      timestamp: Date.now(),
     };
 
     setOrderHistory((prev) => [newOrder, ...prev]);
@@ -112,6 +128,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         items,
         orderHistory,
+        walletBalance,
+        loadWallet,
         addToCart,
         removeFromCart,
         updateQuantity,

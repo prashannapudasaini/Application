@@ -1,290 +1,331 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useState } from "react";
 import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import { useCart } from "../../context/CartContext";
 
-const TRANSACTIONS = [
-  {
-    id: "1",
-    title: "Added to Wallet",
-    amount: 500,
-    type: "credit",
-    date: "12 May, 10:30 AM",
-  },
-  {
-    id: "2",
-    title: "Milk & Paneer Order",
-    amount: 230,
-    type: "debit",
-    date: "10 May, 08:15 AM",
-  },
-  {
-    id: "3",
-    title: "Daily Milk Subscription",
-    amount: 160,
-    type: "debit",
-    date: "08 May, 07:00 AM",
-  },
-  {
-    id: "4",
-    title: "Order Refund (#1234)",
-    amount: 120,
-    type: "credit",
-    date: "05 May, 02:20 PM",
-  },
-];
+const QUICK_AMOUNTS = [500, 1000, 2000, 5000];
 
 export default function WalletScreen() {
+  const { walletBalance, loadWallet } = useCart();
+  const [customAmount, setCustomAmount] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastLoaded, setLastLoaded] = useState(0);
+
+  const handleLoadMoney = (amount: number) => {
+    if (amount <= 0 || isNaN(amount)) return;
+
+    loadWallet(amount);
+    setLastLoaded(amount);
+    setCustomAmount("");
+    setShowSuccessModal(true);
+  };
+
+  // Determine if they qualify for the bonus text hint
+  const currentInputAmount = parseInt(customAmount) || 0;
+  const qualifiesForBonus = currentInputAmount >= 2000;
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Sitaram Wallet</Text>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Sitaram Pay</Text>
-          <TouchableOpacity style={styles.historyBtn} activeOpacity={0.7}>
+        {/* Balance Card */}
+        <View style={styles.balanceCard}>
+          <Text style={styles.balanceLabel}>Available Balance</Text>
+          <Text style={styles.balanceAmount}>
+            NPR {walletBalance.toLocaleString()}
+          </Text>
+          <View style={styles.walletIconBg}>
             <MaterialCommunityIcons
-              name="history"
-              size={24}
-              color={COLORS.text}
+              name="wallet-outline"
+              size={48}
+              color="rgba(255,255,255,0.2)"
             />
+          </View>
+        </View>
+
+        {/* Top Up Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Add Money to Wallet</Text>
+          <Text style={styles.sectionSubtitle}>
+            Load NPR 2000 or more to instantly get 10% Extra Cash!
+          </Text>
+
+          {/* Quick Add Buttons */}
+          <View style={styles.quickAddGrid}>
+            {QUICK_AMOUNTS.map((amt) => (
+              <TouchableOpacity
+                key={amt}
+                style={styles.quickAddBtn}
+                activeOpacity={0.7}
+                onPress={() => handleLoadMoney(amt)}
+              >
+                {amt >= 2000 && (
+                  <View style={styles.bonusBadge}>
+                    <Text style={styles.bonusBadgeText}>+10%</Text>
+                  </View>
+                )}
+                <Text style={styles.quickAddText}>+ NPR {amt}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Custom Amount Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.currencyPrefix}>NPR</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter amount"
+              keyboardType="numeric"
+              value={customAmount}
+              onChangeText={setCustomAmount}
+            />
+          </View>
+
+          {qualifiesForBonus && (
+            <Text style={styles.bonusHintText}>
+              🎁 You will receive an extra NPR {currentInputAmount * 0.1} bonus!
+            </Text>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.loadBtn,
+              (!currentInputAmount || currentInputAmount <= 0) &&
+                styles.loadBtnDisabled,
+            ]}
+            activeOpacity={0.8}
+            disabled={!currentInputAmount || currentInputAmount <= 0}
+            onPress={() => handleLoadMoney(currentInputAmount)}
+          >
+            <Text style={styles.loadBtnText}>
+              Proceed to Pay via eSewa / Bank
+            </Text>
           </TouchableOpacity>
         </View>
-
-        {/* Optimized, Smaller & Cleaner Digital Card */}
-        <View style={styles.digitalCard}>
-          <View style={styles.cardInfoContainer}>
-            <View style={styles.cardTextLeft}>
-              <Text style={styles.balanceLabel}>Available Balance</Text>
-              <Text style={styles.balanceAmount}>
-                ₹1,250<Text style={styles.balanceDecimal}>.00</Text>
-              </Text>
-            </View>
-            
-            <View style={styles.cardVisualRight}>
-              <Text style={styles.cardTag}>ACTIVE</Text>
-              <MaterialCommunityIcons
-                name="contactless-payment"
-                size={24}
-                color="rgba(255,255,255,0.6)"
-              />
-            </View>
-          </View>
-
-          {/* Streamlined Horizontal Actions */}
-          <View style={styles.cardActions}>
-            <Pressable
-              style={styles.actionBtn}
-              android_ripple={{ color: "rgba(255,255,255,0.15)" }}
-            >
-              <Feather name="plus" size={16} color="#FFF" />
-              <Text style={styles.actionText}>Add Money</Text>
-            </Pressable>
-            
-            <View style={styles.actionDivider} />
-            
-            <Pressable
-              style={styles.actionBtn}
-              android_ripple={{ color: "rgba(255,255,255,0.15)" }}
-            >
-              <Feather name="arrow-up-right" size={16} color="#FFF" />
-              <Text style={styles.actionText}>Send Bank</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Recent Transactions */}
-        <View style={styles.transactionsSection}>
-          <Text style={styles.sectionHeading}>Recent Transactions</Text>
-
-          <View style={styles.txnList}>
-            {TRANSACTIONS.map((txn, index) => {
-              const isCredit = txn.type === "credit";
-              const isLast = index === TRANSACTIONS.length - 1;
-
-              return (
-                <View
-                  key={txn.id}
-                  style={[styles.txnRow, isLast && styles.txnRowLast]}
-                >
-                  <View
-                    style={[
-                      styles.txnIconBox,
-                      { backgroundColor: isCredit ? "#E8F5E9" : "#FFEBEE" },
-                    ]}
-                  >
-                    <Feather
-                      name={isCredit ? "arrow-down-left" : "arrow-up-right"}
-                      size={20}
-                      color={isCredit ? COLORS.success : COLORS.primary}
-                    />
-                  </View>
-
-                  <View style={styles.txnDetails}>
-                    <Text style={styles.txnTitle}>{txn.title}</Text>
-                    <Text style={styles.txnDate}>{txn.date}</Text>
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.txnAmount,
-                      { color: isCredit ? COLORS.success : COLORS.text },
-                    ]}
-                  >
-                    {isCredit ? "+" : "-"}₹{txn.amount}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
       </ScrollView>
+
+      {/* Success Modal */}
+      <Modal visible={showSuccessModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconWrapper}>
+              <Feather name="check" size={40} color="#FFF" />
+            </View>
+            <Text style={styles.modalTitle}>Top-up Successful!</Text>
+
+            <Text style={styles.modalMessage}>
+              You have successfully loaded NPR {lastLoaded}.
+              {lastLoaded >= 2000 &&
+                ` You also received a 10% bonus of NPR ${lastLoaded * 0.1}!`}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalConfirmBtn}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={styles.modalConfirmBtnText}>Great</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scrollContent: { padding: SPACING.m, paddingBottom: 100 },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    padding: SPACING.m,
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
     alignItems: "center",
-    marginBottom: SPACING.m, // Reduced spacing
   },
   headerTitle: {
-    fontSize: 26, // Marginally crisper size
+    fontSize: 18,
     fontWeight: "900",
     color: COLORS.text,
-    letterSpacing: -0.5,
+    textTransform: "uppercase",
   },
-  historyBtn: { padding: SPACING.xs },
+  scrollContent: { padding: SPACING.m, paddingBottom: 100 },
 
-  // --- COMPACT DIGITAL CARD STYLES ---
-  digitalCard: {
-    backgroundColor: COLORS.primary,
+  balanceCard: {
+    backgroundColor: "#001F3F",
     borderRadius: RADIUS.large,
-    padding: 16, // Snug, unified padding
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
+    padding: SPACING.xl,
     marginBottom: SPACING.l,
-  },
-  cardInfoContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 14,
-  },
-  cardTextLeft: {
-    flex: 1,
-  },
-  cardVisualRight: {
-    alignItems: "flex-end",
-    gap: 12,
-  },
-  cardTag: {
-    color: "#FFF",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: RADIUS.small,
+    overflow: "hidden",
+    elevation: 4,
   },
   balanceLabel: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 14,
     fontWeight: "600",
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  balanceAmount: {
-    color: "#FFF",
-    fontSize: 30, // Scaled down from 38
-    fontWeight: "900",
-    letterSpacing: -0.5,
+  balanceAmount: { color: "#FFF", fontSize: 32, fontWeight: "900" },
+  walletIconBg: {
+    position: "absolute",
+    right: -10,
+    bottom: -10,
+    transform: [{ scale: 2.5 }],
   },
-  balanceDecimal: { fontSize: 18, color: "rgba(255,255,255,0.75)" },
 
-  cardActions: {
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.12)",
-    borderRadius: RADIUS.medium,
-    overflow: "hidden",
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 10, // Slimmer pill profile
-    gap: 6,
-  },
-  actionText: { color: "#FFF", fontSize: 13, fontWeight: "700" },
-  actionDivider: {
-    width: 1,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    marginVertical: 6,
-  },
-  // -----------------------------------
-
-  transactionsSection: { flex: 1 },
-  sectionHeading: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: COLORS.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: SPACING.s,
-  },
-  txnList: {
+  section: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.large,
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.xs,
+    padding: SPACING.m,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  txnRow: {
+  sectionTitle: { fontSize: 16, fontWeight: "900", color: COLORS.text },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: "700",
+    marginBottom: SPACING.m,
+    marginTop: 2,
+  },
+
+  quickAddGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: SPACING.m,
+  },
+  quickAddBtn: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: "#F8F8F8",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.medium,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickAddText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.textSecondary,
+  },
+  bonusBadge: {
+    position: "absolute",
+    top: -8,
+    right: -4,
+    backgroundColor: "#27AE60",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  bonusBadgeText: { color: "#FFF", fontSize: 9, fontWeight: "900" },
+
+  inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: SPACING.m,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.medium,
+    paddingHorizontal: SPACING.m,
+    backgroundColor: "#FAFAFA",
   },
-  txnRowLast: { borderBottomWidth: 0 },
-  txnIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.round,
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.textSecondary,
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.text,
+    paddingVertical: 14,
+  },
+  bonusHintText: {
+    color: "#27AE60",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 8,
+    textAlign: "center",
+  },
+
+  loadBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.medium,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: SPACING.m,
+  },
+  loadBtnDisabled: { backgroundColor: "#CCCCCC" },
+  loadBtnText: {
+    color: "#FFF",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: SPACING.m,
+    padding: SPACING.xl,
   },
-  txnDetails: { flex: 1 },
-  txnTitle: {
-    fontSize: 14,
-    fontWeight: "700",
+  modalCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#FFF",
+    borderRadius: RADIUS.large,
+    padding: SPACING.xl,
+    alignItems: "center",
+  },
+  modalIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#27AE60",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: SPACING.l,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
     color: COLORS.text,
-    marginBottom: 2,
+    marginBottom: 8,
+    textAlign: "center",
   },
-  txnDate: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "500" },
-  txnAmount: { fontSize: 15, fontWeight: "900" },
+  modalMessage: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: SPACING.xl,
+  },
+  modalConfirmBtn: {
+    width: "100%",
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+  },
+  modalConfirmBtnText: { color: "#FFF", fontSize: 14, fontWeight: "800" },
 });

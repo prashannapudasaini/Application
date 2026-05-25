@@ -9,9 +9,16 @@ import {
   View,
 } from "react-native";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import { useCart } from "../../context/CartContext"; // 🔥 1. Import your Cart Context
 
 export default function HomeHeader() {
   const router = useRouter();
+
+  // 🔥 2. Pull the live data from the global engine
+  const { items, walletBalance } = useCart();
+
+  // 🔥 3. Calculate exactly how many items are in the cart
+  const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
 
   return (
     <View style={styles.container}>
@@ -35,9 +42,13 @@ export default function HomeHeader() {
             onPress={() => router.push("/cart")}
           >
             <Feather name="shopping-cart" size={22} color={COLORS.text} />
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>3</Text>
-            </View>
+
+            {/* 🔥 4. Only show the badge if there is at least 1 item in the cart */}
+            {cartItemCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{cartItemCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           {/* Wallet Pill - Navigates to /wallet */}
@@ -47,7 +58,10 @@ export default function HomeHeader() {
             onPress={() => router.push("/wallet")}
           >
             <Ionicons name="wallet-outline" size={14} color={COLORS.primary} />
-            <Text style={styles.walletText}>₹1,250</Text>
+            {/* 🔥 5. Dynamic Wallet Balance */}
+            <Text style={styles.walletText}>
+              NPR {walletBalance.toLocaleString()}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
