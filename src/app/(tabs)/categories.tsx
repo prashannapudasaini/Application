@@ -99,10 +99,8 @@ export default function CategoriesScreen() {
                 style={[styles.categoryCard, { backgroundColor: bgColor }]}
                 android_ripple={{ color: "rgba(0,0,0,0.05)" }}
                 onPress={() =>
-                  router.push({
-                    pathname: `/product/${cat.id}`,
-                    params: { title: cat.title },
-                  })
+                  // 🔥 FIXED ROUTING: Now points to the category folder we created
+                  router.push(`/category/${cat.title}`)
                 }
               >
                 <View style={styles.textContainer}>
@@ -188,7 +186,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   searchIcon: { marginRight: SPACING.s },
-  searchInput: { flex: 1, fontSize: 15, color: COLORS.text, fontWeight: "500" },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.text,
+    fontWeight: "500",
+    outlineStyle: "none",
+  },
 
   scrollContent: {
     paddingHorizontal: SPACING.m,
