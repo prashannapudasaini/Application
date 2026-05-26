@@ -39,7 +39,6 @@ export default function ProfileScreen() {
     {
       title: "Account Settings",
       data: [
-        // 🔥 FIXED: Direct explicit relative matching routes
         { id: "profile", title: "Profile Settings", icon: "account-outline", color: "#4A90E2", onPress: () => router.push('/profile/settings') },
         { id: "locations", title: "My locations", icon: "map-marker-outline", color: "#F5A623", onPress: () => router.push('/profile/locations') },
         { id: "password", title: "Change Password", icon: "key-outline", color: "#6C5CE7", onPress: () => router.push('/profile/settings') },
@@ -58,9 +57,9 @@ export default function ProfileScreen() {
     {
       title: "General Settings",
       data: [
-        { id: "about", title: "About us", icon: "information-outline", color: "#636E72", onPress: () => router.push('/profile/info') },
-        { id: "faq", title: "FAQ", icon: "help-circle-outline", color: "#0984E3", onPress: () => router.push('/profile/info') },
-        { id: "terms", title: "Terms & Conditions", icon: "file-document-outline", color: "#2D3436", onPress: () => router.push('/profile/info') },
+        { id: "about", title: "About us", icon: "information-outline", color: "#636E72", onPress: () => router.push({ pathname: '/profile/info', params: { title: 'About us' } }) },
+        { id: "faq", title: "FAQ", icon: "help-circle-outline", color: "#0984E3", onPress: () => router.push({ pathname: '/profile/info', params: { title: 'FAQ' } }) },
+        { id: "terms", title: "Terms & Conditions", icon: "file-document-outline", color: "#2D3436", onPress: () => router.push({ pathname: '/profile/info', params: { title: 'Terms & Conditions' } }) },
         { id: "contact", title: "Contact Us", icon: "headset", color: "#00B894", onPress: () => router.push('/profile/support') },
         { id: "share", title: "Share Referral Code", icon: "share-variant-outline", color: "#800000", onPress: handleShareReferral },
       ]
@@ -78,18 +77,12 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Hero Card Container with camera icon completely removed */}
         <View style={styles.heroCard}>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{currentUserName.charAt(0).toUpperCase()}</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.editBadge} 
-              activeOpacity={0.8} 
-              onPress={() => triggerCustomAlert('Camera Picker', 'Please check your app permissions to upload custom profile pictures.')}
-            >
-              <Feather name="camera" size={10} color="#FFF" />
-            </TouchableOpacity>
           </View>
           
           <Text style={styles.userName}>{currentUserName}</Text>
@@ -135,6 +128,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Custom Reusable Status Modal */}
       <Modal visible={modalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -181,7 +175,6 @@ const styles = StyleSheet.create({
   avatarWrapper: { position: "relative", marginBottom: SPACING.m },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#800000", justifyContent: "center", alignItems: "center" },
   avatarText: { fontSize: 32, fontWeight: "900", color: "#FFF" },
-  editBadge: { position: "absolute", bottom: 0, right: 0, backgroundColor: "#1A1A1A", padding: 6, borderRadius: 12, borderWidth: 2, borderColor: "#FFF" },
   userName: { fontSize: 20, fontWeight: "900", color: "#1A1A1A", marginBottom: 4 },
   userPhone: { fontSize: 14, color: "#666", marginBottom: SPACING.m, fontWeight: "600" },
   loyaltyBadge: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF9E6", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, gap: 6 },

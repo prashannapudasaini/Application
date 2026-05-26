@@ -1,20 +1,23 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { SPACING } from "../../constants/theme";
-import { useAuth } from "../_layout";
+import { SPACING, RADIUS } from "../../constants/theme";
+import { useAuth } from "../_layout"; 
 
 export default function ProfileSettingsScreen() {
   const router = useRouter();
-  const { user } = useAuth();
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
+  const { user, updateUser } = useAuth(); // Grabbing dynamic state modifiers from context
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  // Read data dynamically from the logged-in state context
-  const displayUser = user?.name || "Prasamshadhungana04";
-  const displayEmail = user?.email || "prasamshadhungana04@gmail.com";
-  const displayPhone = user?.phone || "+977 980-0000000";
+  // State to track which field is actively being edited ('name' | 'email' | 'phone' | null)
+  const [activeEditingField, setActiveEditingField] = useState<string | null>(null);
+
+  // Local mirror states to capture changes during active typing
+  const [localName, setLocalName] = useState(user?.name || "Xv");
+  const [localEmail, setLocalEmail] = useState(user?.email || "xv");
+  const [localPhone, setLocalPhone] = useState(user?.phone || "+977 980-0000000");
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -24,8 +27,24 @@ export default function ProfileSettingsScreen() {
     }
   };
 
+  // Triggers when a button is clicked to toggle or save contextual updates
+  const handleFieldAction = (fieldType: 'name' | 'email' | 'phone') => {
+    if (activeEditingField === fieldType) {
+      // 💾 User clicked 'Save' -> Commit changes to global Auth state machine
+      if (fieldType === 'name') updateUser({ name: localName });
+      if (fieldType === 'email') updateUser({ email: localEmail });
+      if (fieldType === 'phone') updateUser({ phone: localPhone });
+      
+      setActiveEditingField(null); // Lock the input wrapper back down
+    } else {
+      // ✏️ User clicked edit -> Unlock exactly this input block exclusively
+      setActiveEditingField(fieldType);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      {/* Header Container */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBack} activeOpacity={0.7}>
           <Feather name="arrow-left" size={24} color="#1A1A1A" />
@@ -38,48 +57,110 @@ export default function ProfileSettingsScreen() {
         <Text style={styles.sectionLabel}>Account Information</Text>
         <View style={styles.card}>
           
+          {/* Full Name Input Box Container */}
           <View style={styles.inputWrapper}>
             <Text style={styles.inputLabel}>Full Name</Text>
             <View style={styles.rowField}>
-              <TextInput style={styles.input} value={displayUser} editable={false} />
-              <TouchableOpacity style={styles.actionBadge} activeOpacity={0.7}>
-                <Text style={styles.actionText}>Save</Text>
+              <TextInput 
+                style={[
+                  styles.input,
+                  Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                ]} 
+                value={localName} 
+                onChangeText={setLocalName}
+                editable={activeEditingField === 'name'} 
+              />
+              <TouchableOpacity 
+                style={styles.actionBadge} 
+                activeOpacity={0.7}
+                onPress={() => handleFieldAction('name')}
+              >
+                <Text style={styles.actionText}>
+                  {activeEditingField === 'name' ? "Save" : "Edit"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
+          {/* Email Address Input Box Container */}
           <View style={styles.inputWrapper}>
             <Text style={styles.inputLabel}>Email Address</Text>
             <View style={styles.rowField}>
-              <TextInput style={styles.input} value={displayEmail} editable={false} />
-              <TouchableOpacity style={styles.actionBadge} activeOpacity={0.7}>
-                <Text style={styles.actionText}>Save</Text>
+              <TextInput 
+                style={[
+                  styles.input,
+                  Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                ]} 
+                value={localEmail} 
+                onChangeText={setLocalEmail}
+                editable={activeEditingField === 'email'} 
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <TouchableOpacity 
+                style={styles.actionBadge} 
+                activeOpacity={0.7}
+                onPress={() => handleFieldAction('email')}
+              >
+                <Text style={styles.actionText}>
+                  {activeEditingField === 'email' ? "Save" : "Edit"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
+          {/* Account Password Input Box Container */}
           <View style={styles.inputWrapper}>
             <Text style={styles.inputLabel}>Account Password</Text>
             <View style={styles.rowField}>
-              <TextInput style={styles.input} value="••••••••" secureTextEntry editable={false} />
-              <TouchableOpacity style={styles.actionBadge} activeOpacity={0.7}>
+              <TextInput 
+                style={[
+                  styles.input,
+                  Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                ]} 
+                value="••••••••" 
+                secureTextEntry 
+                editable={false} 
+              />
+              <TouchableOpacity 
+                style={styles.actionBadge} 
+                activeOpacity={0.7}
+                onPress={() => router.push('/profile/settings')}
+              >
                 <Text style={styles.actionText}>Update</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          <View style={[styles.inputWrapper, { borderBottomWidth: 0 }]}>
+          {/* Phone Number Input Box Container */}
+          <View style={styles.inputWrapper} style={{ borderBottomWidth: 0 }}>
             <Text style={styles.inputLabel}>Phone Number</Text>
             <View style={styles.rowField}>
-              <TextInput style={styles.input} value={displayPhone} editable={false} />
-              <TouchableOpacity style={styles.actionBadge} activeOpacity={0.7}>
-                <Text style={styles.actionText}>Save</Text>
+              <TextInput 
+                style={[
+                  styles.input,
+                  Platform.OS === 'web' && { outlineStyle: 'none' } as any
+                ]} 
+                value={localPhone} 
+                onChangeText={setLocalPhone}
+                editable={activeEditingField === 'phone'} 
+                keyboardType="phone-pad"
+              />
+              <TouchableOpacity 
+                style={styles.actionBadge} 
+                activeOpacity={0.7}
+                onPress={() => handleFieldAction('phone')}
+              >
+                <Text style={styles.actionText}>
+                  {activeEditingField === 'phone' ? "Save" : "Edit"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
         </View>
 
+        {/* Preferences Component Module */}
         <Text style={styles.sectionLabel}>App Preferences</Text>
         <View style={styles.card}>
           <View style={[styles.rowField, { justifyContent: 'space-between', paddingVertical: 4 }]}>
@@ -109,7 +190,7 @@ const styles = StyleSheet.create({
   inputWrapper: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5', paddingBottom: 12, marginBottom: 12 },
   inputLabel: { fontSize: 11, fontWeight: '700', color: '#888', marginBottom: 4 },
   rowField: { flexDirection: 'row', alignItems: 'center' },
-  input: { flex: 1, fontSize: 15, fontWeight: '700', color: '#1A1A1A', padding: 0 },
+  input: { flex: 1, fontSize: 15, fontWeight: '700', color: '#1A1A1A', padding: 0, borderWidth: 0 },
   actionBadge: { backgroundColor: '#FFF0F0', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(128,0,0,0.08)' },
   actionText: { fontSize: 12, fontWeight: '800', color: '#800000' },
   preferenceLabel: { fontSize: 14, fontWeight: '700', color: '#1A1A1A' }
