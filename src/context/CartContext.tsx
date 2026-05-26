@@ -24,8 +24,8 @@ export interface OrderItem {
 interface CartContextType {
   items: CartItem[];
   orderHistory: OrderItem[];
-  walletBalance: number; // 🔥 NEW: Tracks user's digital money
-  loadWallet: (amount: number) => void; // 🔥 NEW: Handles adding money
+  walletBalance: number;
+  loadWallet: (amount: number) => void;
   addToCart: (
     item: Omit<CartItem, "cartItemId" | "quantity"> & { quantity?: number },
   ) => void;
@@ -33,18 +33,19 @@ interface CartContextType {
   updateQuantity: (cartItemId: string, newQuantity: number) => void;
   clearCart: () => void;
   cartTotal: number;
-  placeOrder: (grandTotal: number, paymentMethod: string) => string; // 🔥 Updated to accept payment method
+  placeOrder: (grandTotal: number, paymentMethod: string) => string;
   cancelOrder: (orderId: string) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  // 🔥 INITIALIZED WITH EMPTY DATA (No mocks)
   const [items, setItems] = useState<CartItem[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderItem[]>([]);
-  const [walletBalance, setWalletBalance] = useState<number>(0); // Starts at NPR 0
+  const [walletBalance, setWalletBalance] = useState<number>(0);
 
-  // 🔥 NEW: Loads money and applies the 10% bonus if amount is 2000 or more
+  // Loads money and applies a 10% bonus if the amount is 2000 or more
   const loadWallet = (amount: number) => {
     const bonus = amount >= 2000 ? amount * 0.1 : 0;
     setWalletBalance((prev) => prev + amount + bonus);
@@ -54,13 +55,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     newItem: Omit<CartItem, "cartItemId" | "quantity"> & { quantity?: number },
   ) => {
     setItems((prev) => {
+      // Generates a unique ID based on the product, size, and subscription plan
       const uniqueId = `${newItem.id}-${newItem.size}-${newItem.plan}`;
       const exists = prev.findIndex((item) => item.cartItemId === uniqueId);
+
       if (exists >= 0) {
         const updated = [...prev];
         updated[exists].quantity += newItem.quantity || 1;
         return updated;
       }
+
       return [
         ...prev,
         { ...newItem, cartItemId: uniqueId, quantity: newItem.quantity || 1 },
@@ -68,11 +72,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const removeFromCart = (cartItemId: string) =>
+  const removeFromCart = (cartItemId: string) => {
     setItems((prev) => prev.filter((i) => i.cartItemId !== cartItemId));
+  };
 
   const updateQuantity = (cartItemId: string, newQuantity: number) => {
-    if (newQuantity <= 0) return removeFromCart(cartItemId);
+    if (newQuantity <= 0) {
+      return removeFromCart(cartItemId);
+    }
+
     setItems((prev) =>
       prev.map((i) =>
         i.cartItemId === cartItemId ? { ...i, quantity: newQuantity } : i,
@@ -87,11 +95,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     0,
   );
 
-  // 🔥 UPDATED: Deducts from wallet if that is the chosen payment method
+  // Deducts from wallet if that is the chosen payment method and saves order
   const placeOrder = (grandTotal: number, paymentMethod: string) => {
     if (items.length === 0) return "";
 
-    // Safety check (handled in checkout UI too)
     if (paymentMethod === "wallet") {
       if (walletBalance < grandTotal) return "";
       setWalletBalance((prev) => prev - grandTotal); // Deduct money
@@ -146,7 +153,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  if (context === undefined)
+  if (context === undefined) {
     throw new Error("useCart must be used within a CartProvider");
+  }
   return context;
 }

@@ -1,8 +1,9 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Modal,
+  Alert,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -11,458 +12,408 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
 import { useCart } from "../../context/CartContext";
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { items, cartTotal, placeOrder, walletBalance } = useCart(); // 🔥 Imported walletBalance
+  const { items, cartTotal, walletBalance, placeOrder } = useCart();
 
-  const [selectedPayment, setSelectedPayment] = useState("cod");
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showErrorModal, setShowErrorModal] = useState(false); // 🔥 Handles insufficient funds
+  // Payment State
+  const [paymentMethod, setPaymentMethod] = useState("cash"); // "cash" or "wallet"
 
-  if (items.length === 0 && !showSuccessModal) {
-    if (Platform.OS !== "web") router.replace("/cart");
-    return (
-      <View style={[styles.container, styles.center]}>
-        <Text style={styles.emptyText}>Your cart is empty.</Text>
-      </View>
-    );
-  }
-
-  const deliveryFee = cartTotal > 500 ? 0 : 50;
-  const grandTotal = cartTotal + deliveryFee;
-
-  const PAYMENT_METHODS = [
-    {
-      id: "cod",
-      title: "Cash on Delivery",
-      icon: "cash",
-      desc: "Pay when your order arrives",
-    },
-    {
-      id: "wallet",
-      title: `Sitaram Wallet (Bal: NPR ${walletBalance.toLocaleString()})`,
-      icon: "wallet-outline",
-      desc: "Fast & Secure checkout",
-    },
-    {
-      id: "card",
-      title: "Credit / Debit Card",
-      icon: "credit-card-outline",
-      desc: "Visa, MasterCard",
-    },
-  ];
+  // 🔥 SAFETY FALLBACKS: Prevents "toLocaleString" crashes!
+  const safeItems = items || [];
+  const safeTotal = cartTotal || 0;
+  const safeWallet = walletBalance || 0;
+  const deliveryFee = safeTotal > 0 ? 50 : 0;
+  const grandTotal = safeTotal + deliveryFee;
 
   const handlePlaceOrder = () => {
-    // 🔥 Check if they chose wallet but don't have enough money
-    if (selectedPayment === "wallet" && walletBalance < grandTotal) {
-      setShowErrorModal(true);
+    if (safeItems.length === 0) {
+      Alert.alert("Empty Cart", "Add some items before checking out.");
       return;
     }
 
-    placeOrder(grandTotal, selectedPayment);
-    setShowSuccessModal(true);
-  };
+    if (paymentMethod === "wallet" && safeWallet < grandTotal) {
+      Alert.alert(
+        "Insufficient Funds",
+        "Please load your wallet or select Cash on Delivery.",
+      );
+      return;
+    }
 
-  const handleFinishCheckout = () => {
-    setShowSuccessModal(false);
-    router.replace("/(tabs)/orders");
+    // Call the context function
+    const orderId = placeOrder(grandTotal, paymentMethod);
+
+    if (Platform.OS === "web") {
+      alert(`Order Placed Successfully! ID: ${orderId}`);
+      router.replace("/(tabs)/orders");
+    } else {
+      Alert.alert(
+        "Order Confirmed! 🎉",
+        `Your order #${orderId} has been placed.`,
+        [
+          {
+            text: "Track Order",
+            onPress: () => router.replace("/(tabs)/orders"),
+          },
+        ],
+      );
+    }
   };
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color={COLORS.text} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          activeOpacity={0.8}
+        >
+          <Feather name="arrow-left" size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
-        <View style={{ width: 32 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Summary</Text>
-          <View style={styles.card}>
-            <View style={styles.billRow}>
-              <Text style={styles.billLabel}>Item Total</Text>
-              <Text style={styles.billValue}>NPR {cartTotal}</Text>
+        {/* 📍 DELIVERY ADDRESS */}
+        <Text style={styles.sectionTitle}>Delivery Address</Text>
+        <View style={styles.card}>
+          <View style={styles.addressRow}>
+            <View style={styles.iconCircle}>
+              <Feather name="map-pin" size={20} color={COLORS.primary} />
             </View>
-            <View style={styles.billRow}>
-              <Text style={styles.billLabel}>Delivery Fee</Text>
-              <Text
-                style={[
-                  styles.billValue,
-                  deliveryFee === 0 && { color: "#27AE60" },
-                ]}
-              >
-                {deliveryFee === 0 ? "FREE" : `NPR ${deliveryFee}`}
+            <View style={styles.addressDetails}>
+              <Text style={styles.addressType}>Home</Text>
+              <Text style={styles.addressText}>
+                Lazimpat, Kathmandu, Bagmati Province
               </Text>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.billRow}>
-              <Text style={styles.grandTotalLabel}>Grand Total</Text>
-              <Text style={styles.grandTotalValue}>NPR {grandTotal}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-          {PAYMENT_METHODS.map((method) => {
-            const isActive = selectedPayment === method.id;
-            // Highlight red if they don't have enough balance for the wallet option
-            const isWalletError =
-              method.id === "wallet" && isActive && walletBalance < grandTotal;
-
-            return (
-              <TouchableOpacity
-                key={method.id}
-                style={[
-                  styles.paymentCard,
-                  isActive && styles.paymentCardActive,
-                  isWalletError && { borderColor: "red" },
-                ]}
-                activeOpacity={0.8}
-                onPress={() => setSelectedPayment(method.id)}
-              >
-                <View
-                  style={[
-                    styles.iconCircle,
-                    isActive && { backgroundColor: COLORS.primary + "15" },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={method.icon as any}
-                    size={22}
-                    color={isActive ? COLORS.primary : COLORS.textSecondary}
-                  />
-                </View>
-                <View style={styles.paymentInfo}>
-                  <Text
-                    style={[
-                      styles.paymentTitle,
-                      isActive && { color: COLORS.primary },
-                    ]}
-                  >
-                    {method.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.paymentDesc,
-                      isWalletError && { color: "red" },
-                    ]}
-                  >
-                    {isWalletError ? "Insufficient Balance" : method.desc}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.radioOuter,
-                    isActive && styles.radioOuterActive,
-                    isWalletError && { borderColor: "red" },
-                  ]}
-                >
-                  {isActive && (
-                    <View
-                      style={[
-                        styles.radioInner,
-                        isWalletError && { backgroundColor: "red" },
-                      ]}
-                    />
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
-
-      <View style={styles.bottomBar}>
-        <View style={styles.bottomTotalBox}>
-          <Text style={styles.bottomTotalLabel}>Total Amount</Text>
-          <Text style={styles.bottomTotalValue}>NPR {grandTotal}</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.placeOrderBtn}
-          activeOpacity={0.8}
-          onPress={handlePlaceOrder}
-        >
-          <Text style={styles.placeOrderText}>PLACE ORDER</Text>
-          <Feather name="check-circle" size={18} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Success Modal */}
-      <Modal visible={showSuccessModal} transparent={true} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View
-              style={[styles.modalIconWrapper, { backgroundColor: "#27AE60" }]}
-            >
-              <Feather name="check" size={40} color="#FFF" />
-            </View>
-            <Text style={styles.modalTitle}>Order Confirmed!</Text>
-            <Text style={styles.modalMessage}>
-              Your order has been placed successfully.
-            </Text>
-            <TouchableOpacity
-              style={styles.modalBtn}
-              activeOpacity={0.8}
-              onPress={handleFinishCheckout}
-            >
-              <Text style={styles.modalBtnText}>View My Orders</Text>
+            <TouchableOpacity>
+              <Text style={styles.changeText}>Change</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
 
-      {/* 🔥 Error Modal (Insufficient Funds) */}
-      <Modal visible={showErrorModal} transparent={true} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        {/* 🛒 ORDER SUMMARY */}
+        <Text style={styles.sectionTitle}>
+          Order Summary ({safeItems.length} Items)
+        </Text>
+        <View style={styles.card}>
+          {safeItems.map((item, index) => (
             <View
-              style={[styles.modalIconWrapper, { backgroundColor: "#FFF0F0" }]}
+              key={item.cartItemId || index.toString()}
+              style={styles.summaryItem}
             >
-              <Feather name="alert-circle" size={40} color={COLORS.primary} />
-            </View>
-            <Text style={styles.modalTitle}>Insufficient Balance</Text>
-            <Text style={styles.modalMessage}>
-              You do not have enough funds in your Sitaram Wallet to complete
-              this purchase.
-            </Text>
-
-            <View style={{ flexDirection: "row", gap: 10, width: "100%" }}>
-              <TouchableOpacity
-                style={[
-                  styles.modalBtn,
-                  { flex: 1, backgroundColor: "#F5F5F5" },
-                ]}
-                onPress={() => setShowErrorModal(false)}
-              >
-                <Text style={[styles.modalBtnText, { color: COLORS.text }]}>
-                  Dismiss
+              <Image source={{ uri: item.image }} style={styles.summaryImage} />
+              <View style={styles.summaryDetails}>
+                <Text style={styles.summaryName} numberOfLines={1}>
+                  {item.name}
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, { flex: 1 }]}
-                onPress={() => {
-                  setShowErrorModal(false);
-                  router.push("/(tabs)/wallet"); // Route directly to wallet top up
-                }}
-              >
-                <Text style={styles.modalBtnText}>Top Up Now</Text>
-              </TouchableOpacity>
+                <Text style={styles.summaryQty}>
+                  Qty: {item.quantity} • {item.size}
+                </Text>
+              </View>
+              <Text style={styles.summaryPrice}>
+                NPR {(item.price * item.quantity).toLocaleString()}
+              </Text>
             </View>
+          ))}
+        </View>
+
+        {/* 💳 PAYMENT METHOD */}
+        <Text style={styles.sectionTitle}>Payment Method</Text>
+        <View style={styles.card}>
+          {/* Wallet Option */}
+          <TouchableOpacity
+            style={[
+              styles.paymentOption,
+              paymentMethod === "wallet" && styles.paymentOptionActive,
+            ]}
+            activeOpacity={0.7}
+            onPress={() => setPaymentMethod("wallet")}
+          >
+            <View style={styles.paymentLeft}>
+              <Ionicons
+                name="wallet"
+                size={24}
+                color={paymentMethod === "wallet" ? COLORS.primary : "#666"}
+              />
+              <View style={{ marginLeft: 12 }}>
+                <Text
+                  style={[
+                    styles.paymentName,
+                    paymentMethod === "wallet" && { color: COLORS.primary },
+                  ]}
+                >
+                  Sitaram Wallet
+                </Text>
+                <Text style={styles.paymentSub}>
+                  Balance: NPR {safeWallet.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.radioCircle,
+                paymentMethod === "wallet" && styles.radioCircleActive,
+              ]}
+            >
+              {paymentMethod === "wallet" && <View style={styles.radioInner} />}
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          {/* Cash Option */}
+          <TouchableOpacity
+            style={[
+              styles.paymentOption,
+              paymentMethod === "cash" && styles.paymentOptionActive,
+            ]}
+            activeOpacity={0.7}
+            onPress={() => setPaymentMethod("cash")}
+          >
+            <View style={styles.paymentLeft}>
+              <MaterialCommunityIcons
+                name="cash"
+                size={24}
+                color={paymentMethod === "cash" ? COLORS.primary : "#666"}
+              />
+              <View style={{ marginLeft: 12 }}>
+                <Text
+                  style={[
+                    styles.paymentName,
+                    paymentMethod === "cash" && { color: COLORS.primary },
+                  ]}
+                >
+                  Cash on Delivery
+                </Text>
+                <Text style={styles.paymentSub}>Pay when you receive</Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.radioCircle,
+                paymentMethod === "cash" && styles.radioCircleActive,
+              ]}
+            >
+              {paymentMethod === "cash" && <View style={styles.radioInner} />}
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* 🧾 BILL DETAILS */}
+        <Text style={styles.sectionTitle}>Bill Details</Text>
+        <View style={styles.card}>
+          <View style={styles.billRow}>
+            <Text style={styles.billLabel}>Subtotal</Text>
+            <Text style={styles.billValue}>
+              NPR {safeTotal.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.billRow}>
+            <Text style={styles.billLabel}>Delivery Fee</Text>
+            <Text style={styles.billValue}>NPR {deliveryFee}</Text>
+          </View>
+          <View style={[styles.divider, { marginVertical: 12 }]} />
+          <View style={styles.billRow}>
+            <Text style={styles.grandTotalLabel}>Grand Total</Text>
+            <Text style={styles.grandTotalValue}>
+              NPR {grandTotal.toLocaleString()}
+            </Text>
           </View>
         </View>
-      </Modal>
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* 🚀 PLACE ORDER BAR */}
+      <View style={styles.bottomBar}>
+        <View style={styles.totalContainer}>
+          <Text style={styles.totalLabel}>Total to Pay</Text>
+          <Text style={styles.totalPrice}>
+            NPR {grandTotal.toLocaleString()}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.checkoutBtn}
+          activeOpacity={0.9}
+          onPress={handlePlaceOrder}
+        >
+          <Text style={styles.checkoutText}>Place Order</Text>
+          <Feather name="check-circle" size={18} color="#FFF" />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  center: { justifyContent: "center", alignItems: "center" },
-  emptyText: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.m,
-  },
+  container: { flex: 1, backgroundColor: "#FAF8F5" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: SPACING.m,
-    backgroundColor: COLORS.card,
+    backgroundColor: "#FAF8F5",
     borderBottomWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#EAEAEA",
   },
-  backBtn: { padding: SPACING.xs },
+  backBtn: { padding: 8, marginLeft: -8 },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "900",
-    color: COLORS.text,
+    color: "#1A1A1A",
     flex: 1,
     textAlign: "center",
-    textTransform: "uppercase",
   },
-  scrollContent: {
-    paddingBottom: 100,
-    paddingHorizontal: SPACING.m,
-    paddingTop: SPACING.m,
-  },
-  section: { marginBottom: SPACING.l },
+
+  content: { padding: SPACING.m },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#001F3F",
-    letterSpacing: 0.5,
-    marginBottom: SPACING.s,
-  },
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.large,
-    padding: SPACING.m,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  billRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: SPACING.s,
-  },
-  billLabel: { fontSize: 13, color: COLORS.textSecondary, fontWeight: "500" },
-  billValue: { fontSize: 14, color: COLORS.text, fontWeight: "700" },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.s,
-  },
-  grandTotalLabel: { fontSize: 15, fontWeight: "900", color: COLORS.text },
-  grandTotalValue: { fontSize: 18, fontWeight: "900", color: COLORS.primary },
-  paymentCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.large,
-    padding: SPACING.m,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: SPACING.m,
-  },
-  paymentCardActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: "#FFFDFD",
-  },
-  paymentInfo: { flex: 1 },
-  paymentTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: COLORS.text,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: SPACING.s,
+    marginLeft: 4,
+    marginTop: SPACING.m,
+  },
+
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: RADIUS.large,
+    padding: SPACING.m,
+    borderWidth: 1,
+    borderColor: "#EAEAEA",
+    marginBottom: SPACING.s,
+  },
+
+  addressRow: { flexDirection: "row", alignItems: "center" },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF0F0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  addressDetails: { flex: 1 },
+  addressType: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1A1A1A",
+    marginBottom: 2,
+  },
+  addressText: { fontSize: 13, color: "#666", lineHeight: 18 },
+  changeText: { color: COLORS.primary, fontWeight: "800", fontSize: 14 },
+
+  summaryItem: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  summaryImage: {
+    width: 50,
+    height: 50,
+    borderRadius: RADIUS.small,
+    backgroundColor: "#F8F8F8",
+    marginRight: 12,
+  },
+  summaryDetails: { flex: 1 },
+  summaryName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1A1A1A",
     marginBottom: 4,
   },
-  paymentDesc: { fontSize: 12, color: COLORS.textSecondary },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  summaryQty: { fontSize: 12, color: "#666", fontWeight: "600" },
+  summaryPrice: { fontSize: 15, fontWeight: "800", color: "#1A1A1A" },
+
+  paymentOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+  },
+  paymentOptionActive: {},
+  paymentLeft: { flexDirection: "row", alignItems: "center" },
+  paymentName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#1A1A1A",
+    marginBottom: 2,
+  },
+  paymentSub: { fontSize: 12, color: "#666", fontWeight: "500" },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
-    borderColor: "#DDD",
+    borderColor: "#CCC",
     justifyContent: "center",
     alignItems: "center",
   },
-  radioOuterActive: { borderColor: COLORS.primary },
+  radioCircleActive: { borderColor: COLORS.primary },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: COLORS.primary,
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#F8F8F8",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: SPACING.m,
+
+  divider: { height: 1, backgroundColor: "#EAEAEA", marginVertical: 12 },
+
+  billRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
   },
+  billLabel: { fontSize: 14, color: "#666", fontWeight: "600" },
+  billValue: { fontSize: 14, color: "#1A1A1A", fontWeight: "700" },
+  grandTotalLabel: { fontSize: 16, color: "#1A1A1A", fontWeight: "900" },
+  grandTotalValue: { fontSize: 18, color: COLORS.primary, fontWeight: "900" },
+
   bottomBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFF",
+    padding: SPACING.m,
+    paddingBottom: Platform.OS === "ios" ? 0 : SPACING.m,
+    borderTopWidth: 1,
+    borderColor: "#EAEAEA",
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: COLORS.card,
+  },
+  totalContainer: { flex: 1 },
+  totalLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#666",
+    marginBottom: 2,
+  },
+  totalPrice: { fontSize: 20, fontWeight: "900", color: "#1A1A1A" },
+  checkoutBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: SPACING.m,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-  },
-  bottomTotalBox: { flex: 1 },
-  bottomTotalLabel: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  bottomTotalValue: { fontSize: 18, fontWeight: "900", color: COLORS.text },
-  placeOrderBtn: {
     backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: RADIUS.medium,
     gap: 8,
   },
-  placeOrderText: {
-    color: "#FFF",
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: SPACING.xl,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 340,
-    backgroundColor: "#FFF",
-    borderRadius: RADIUS.large,
-    padding: SPACING.xl,
-    alignItems: "center",
-    elevation: 10,
-  },
-  modalIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: SPACING.l,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: COLORS.text,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: SPACING.xl,
-  },
-  modalBtn: {
-    backgroundColor: "#001F3F",
-    width: "100%",
-    paddingVertical: 14,
-    borderRadius: RADIUS.medium,
-    alignItems: "center",
-  },
-  modalBtnText: {
+  checkoutText: {
     color: "#FFF",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
     letterSpacing: 0.5,
   },
 });

@@ -25,7 +25,12 @@ export default function HomeHeader({
   const router = useRouter();
   const { items, walletBalance } = useCart();
 
-  const cartItemCount = items.reduce((total, item) => total + item.quantity, 0);
+  // Safety check to ensure items array exists before reducing
+  const safeItems = items || [];
+  const cartItemCount = safeItems.reduce(
+    (total, item) => total + item.quantity,
+    0,
+  );
 
   return (
     <View style={styles.container}>
@@ -59,7 +64,8 @@ export default function HomeHeader({
           >
             <Ionicons name="wallet-outline" size={14} color={COLORS.primary} />
             <Text style={styles.walletText}>
-              NPR {walletBalance.toLocaleString()}
+              {/* 🔥 FIX: Added safety fallback to prevent undefined crash */}
+              NPR {(walletBalance || 0).toLocaleString()}
             </Text>
           </TouchableOpacity>
         </View>

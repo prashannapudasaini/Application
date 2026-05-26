@@ -16,7 +16,12 @@ import { useCart } from "../../context/CartContext";
 
 export default function CartScreen() {
   const router = useRouter();
-  const { items, updateQuantity, removeItem, cartTotal } = useCart();
+
+  // 🔥 FIX: Pulled `removeFromCart` to exactly match your context
+  const { items, updateQuantity, removeFromCart, cartTotal } = useCart();
+
+  // Safety fallback
+  const safeItems = items || [];
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -40,13 +45,16 @@ export default function CartScreen() {
         <Text style={styles.productName} numberOfLines={1}>
           {item.name}
         </Text>
-        <Text style={styles.productSize}>{item.size}</Text>
+        <Text style={styles.productSize}>
+          {item.size} {item.plan ? `• ${item.plan}` : ""}
+        </Text>
         <Text style={styles.productPrice}>NPR {item.price}</Text>
       </View>
 
       <View style={styles.actionColumn}>
         <TouchableOpacity
-          onPress={() => removeItem(item.id, item.size)}
+          // 🔥 FIX: Passed the specific cartItemId instead of id/size
+          onPress={() => removeFromCart(item.cartItemId)}
           style={styles.deleteBtn}
         >
           <Feather name="trash-2" size={18} color="#FF3B30" />
@@ -55,14 +63,16 @@ export default function CartScreen() {
         <View style={styles.quantityController}>
           <TouchableOpacity
             style={styles.qtyBtn}
-            onPress={() => updateQuantity(item.id, item.size, -1)}
+            // 🔥 FIX: Passed the exact new quantity (current - 1)
+            onPress={() => updateQuantity(item.cartItemId, item.quantity - 1)}
           >
             <Feather name="minus" size={16} color="#1A1A1A" />
           </TouchableOpacity>
           <Text style={styles.qtyText}>{item.quantity}</Text>
           <TouchableOpacity
             style={styles.qtyBtn}
-            onPress={() => updateQuantity(item.id, item.size, 1)}
+            // 🔥 FIX: Passed the exact new quantity (current + 1)
+            onPress={() => updateQuantity(item.cartItemId, item.quantity + 1)}
           >
             <Feather name="plus" size={16} color="#1A1A1A" />
           </TouchableOpacity>
@@ -88,7 +98,7 @@ export default function CartScreen() {
 
       {/* Main Content */}
       <View style={styles.content}>
-        {items.length === 0 ? (
+        {safeItems.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
               <Feather name="shopping-cart" size={40} color="#800000" />
@@ -108,8 +118,9 @@ export default function CartScreen() {
         ) : (
           <>
             <FlatList
-              data={items}
-              keyExtractor={(item) => `${item.id}-${item.size}`}
+              data={safeItems}
+              // 🔥 FIX: Use cartItemId for the key extractor
+              keyExtractor={(item) => item.cartItemId}
               renderItem={renderCartItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
@@ -120,7 +131,8 @@ export default function CartScreen() {
               <View style={styles.totalContainer}>
                 <Text style={styles.totalLabel}>Total Amount</Text>
                 <Text style={styles.totalPrice}>
-                  NPR {cartTotal.toLocaleString()}
+                  {/* 🔥 FIX: Safely render toLocaleString */}
+                  NPR {cartTotal?.toLocaleString() || 0}
                 </Text>
               </View>
               <TouchableOpacity
@@ -253,7 +265,7 @@ const styles = StyleSheet.create({
   checkoutBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#800000", // Corporate Sitaram Red
+    backgroundColor: "#800000",
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: RADIUS.medium,
