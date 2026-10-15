@@ -1,163 +1,116 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BASE_URL, getImageUrl } from "../../constants/api";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
 import { useCart } from "../../context/CartContext";
 
-// 🔥 NEW: Added an 'offer' property to the Daily plan
-const PLANS = [
-  {
-    id: "One Time",
-    icon: "shopping-outline",
-    label: "One Time Buy",
-    sub: "1 Delivery",
-  },
-  {
-    id: "Daily",
-    icon: "calendar-today",
-    label: "Daily",
-    sub: "30 Deliveries/Mo",
-    offer: "🎁 2L FREE",
-  },
-  {
-    id: "Alternate",
-    icon: "calendar-multiselect",
-    label: "Alternate Days",
-    sub: "15 Deliveries/Mo",
-  },
-  {
-    id: "Weekly",
-    icon: "calendar-week",
-    label: "Weekly",
-    sub: "4 Deliveries/Mo",
-  },
-];
-
 export default function ProductDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id, image: paramImage, name: paramName } = useLocalSearchParams();
   const { addToCart } = useCart();
 
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const [selectedPlan, setSelectedPlan] = useState("One Time");
-  const [deliveryTime, setDeliveryTime] = useState("Morning (7:00 AM)");
+
+  const initialName = typeof paramName === 'string' ? paramName : "";
+  const initialImage = typeof paramImage === 'string' ? paramImage : "";
 
   useEffect(() => {
-    fetch(`${BASE_URL}/api/products/get_one.php?id=${id}`)
+    fetch(`${BASE_URL}/api/products/get_one.php?id=${id}&_t=${Date.now()}`)
       .then((res) => res.json())
       .then((json) => {
         if (json.status === "success") {
-          setProduct(json.data);
+          const fetchedProduct = json.data;
+          setProduct(fetchedProduct);
+          if (fetchedProduct.variants && fetchedProduct.variants.length > 0) {
+            let cheapestIdx = 0;
+            let minPrice = Infinity;
+            fetchedProduct.variants.forEach((v: any, idx: number) => {
+              const price = Number(v.price_npr || 0);
+              if (price > 0 && price < minPrice) {
+                minPrice = price;
+                cheapestIdx = idx;
+              }
+            });
+            setActiveVariantIndex(cheapestIdx);
+          }
         }
       })
       .catch((err) => console.error("Detail Fetch Error:", err))
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading)
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  if (!product)
-    return (
-      <View style={styles.center}>
-        <Text>Product not found.</Text>
-      </View>
-    );
-
   const activeVariant =
-    product.variants && product.variants.length > 0
+    product?.variants && product.variants.length > 0
       ? product.variants[activeVariantIndex]
       : null;
 
   const displayImage = activeVariant?.image
     ? getImageUrl(activeVariant.image)
-    : getImageUrl(product.image);
-  const basePrice = parseFloat(activeVariant?.price_npr || product.price || 0);
-  const displaySize = activeVariant?.size || product.size || "Standard";
+    : product?.image
+      ? getImageUrl(product.image)
+      : initialImage;
 
-  const getPlanMultiplier = () => {
-    if (selectedPlan === "Daily") return 30;
-    if (selectedPlan === "Alternate") return 15;
-    if (selectedPlan === "Weekly") return 4;
-    return 1;
-  };
+  const basePrice = product ? parseFloat(activeVariant?.price_npr || product.price || 0) : 0;
+  const cutPrice = product ? (activeVariant?.original_price ? parseFloat(activeVariant.original_price) : product.original_price ? parseFloat(product.original_price) : null) : null;
+  const displaySize = product ? (activeVariant?.size || product.size || "Standard") : "";
 
-  const planMultiplier = getPlanMultiplier();
-  const finalItemPrice = basePrice * planMultiplier;
-  const grandTotal = finalItemPrice * quantity;
+  const showDiscount = cutPrice !== null && cutPrice > basePrice;
+  const discountPercent = showDiscount ? Math.round(((cutPrice! - basePrice) / cutPrice!) * 100) : 0;
 
-  const getStartDate = () => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const startDate = new Date();
+  // --- CURD & OUT-OF-STOCK RESTRICTION LOGIC ---
+  const currentStock = product ? parseInt(
+    String(activeVariant?.stock_quantity ?? product.stock_quantity ?? product.stock ?? 0),
+    10
+  ) : 0;
 
-    if (currentHour < 20) {
-      startDate.setDate(now.getDate() + 1);
-    } else {
-      startDate.setDate(now.getDate() + 2);
-    }
-
-    return startDate.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-    });
-  };
+  const isOutOfStock = currentStock <= 0;
+  const isUnavailable = product ? isOutOfStock : true;
 
   const handleAddToCart = () => {
-    const formattedPlanString =
-      selectedPlan === "One Time"
-        ? `One Time • ${deliveryTime} • ${getStartDate()}`
-        : `${selectedPlan} • ${deliveryTime} • Starts ${getStartDate()}`;
-
+    if (isUnavailable) return;
     for (let i = 0; i < quantity; i++) {
       addToCart({
         id: product.id + (activeVariant ? `-${activeVariant.size}` : ""),
         name: product.name,
-        price: finalItemPrice,
+        price: basePrice,
         image: activeVariant?.image || product.image,
         size: displaySize,
-        plan: formattedPlanString,
       });
     }
     router.push("/cart");
   };
 
-  const featurePoints = product.features
-    ? product.features
-        .split(/(?:\r\n|\r|\n|(?<=[a-z])\.\s+)/)
-        .filter((f: string) => f.trim().length > 0)
-    : [
-        "Texture & Taste: Soft and delicious, maintaining the natural flavor.",
-        "Pure Quality: Contains no added preservatives for a more natural product.",
-        "Storage: Must be stored at refrigeration temperature (4°C or below).",
-      ];
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          }}
+        >
           <Feather name="arrow-left" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {product.name}
+          {product?.name || initialName || "Loading..."}
         </Text>
         <View style={{ width: 32 }} />
       </View>
@@ -169,231 +122,160 @@ export default function ProductDetailScreen() {
         <View style={styles.imageWrapper}>
           <Image
             source={{ uri: displayImage }}
-            style={styles.mainImage}
-            resizeMode="contain"
+            style={[styles.mainImage, isUnavailable && product && { opacity: 0.55 }]}
+            contentFit="contain"
+            transition={300}
+            cachePolicy="memory-disk"
           />
         </View>
 
         <View style={styles.detailsContainer}>
-          <Text style={styles.productTitle}>
-            {product.name} <Text style={styles.titleSize}>({displaySize})</Text>
-          </Text>
-
-          {product.variants && product.variants.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.smallLabel}>PACK SIZE</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.variantRow}
-              >
-                {product.variants.map((variant: any, index: number) => {
-                  const isActive = index === activeVariantIndex;
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.variantBtn,
-                        isActive && styles.variantBtnActive,
-                      ]}
-                      onPress={() => setActiveVariantIndex(index)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.variantText,
-                          isActive && styles.variantTextActive,
-                        ]}
-                      >
-                        {variant.size}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+          {loading ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator size="large" color="#800000" />
             </View>
-          )}
-
-          <Text style={styles.priceText}>
-            NPR {basePrice} <Text style={styles.perUnitText}>/ unit</Text>
-          </Text>
-
-          <View style={styles.planSection}>
-            <Text style={styles.smallLabel}>CHOOSE PLAN</Text>
-            <View style={styles.planGrid}>
-              {PLANS.map((plan) => {
-                const isActive = selectedPlan === plan.id;
-                return (
-                  <TouchableOpacity
-                    key={plan.id}
-                    style={[styles.planCard, isActive && styles.planCardActive]}
-                    activeOpacity={0.8}
-                    onPress={() => setSelectedPlan(plan.id)}
-                  >
-                    {/* 🔥 NEW: Dynamic Offer Badge */}
-                    {plan.offer && (
-                      <View style={styles.offerBadge}>
-                        <Text style={styles.offerBadgeText}>{plan.offer}</Text>
-                      </View>
-                    )}
-
-                    <MaterialCommunityIcons
-                      name={plan.icon as any}
-                      size={20}
-                      color={isActive ? "#FFF" : COLORS.textSecondary}
-                      style={{ marginBottom: 4 }}
-                    />
-                    <Text
-                      style={[
-                        styles.planCardText,
-                        isActive && styles.planCardTextActive,
-                      ]}
-                    >
-                      {plan.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.planSubText,
-                        isActive && styles.planSubTextActive,
-                      ]}
-                    >
-                      {plan.sub}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+          ) : !product ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <Text style={styles.emptyText}>Product not found.</Text>
             </View>
-          </View>
-
-          <View style={styles.timingSection}>
-            <Text style={styles.smallLabel}>DELIVERY TIMING</Text>
-
-            <View style={styles.timingInfoBox}>
-              <Feather
-                name="info"
-                size={14}
-                color={COLORS.primary}
-                style={{ marginTop: 2, marginRight: 6 }}
-              />
-              <Text style={styles.timingInfoText}>
-                Order before 8:00 PM for tomorrow's delivery. Your cycle begins:{" "}
-                <Text style={{ fontWeight: "800" }}>{getStartDate()}</Text>
+          ) : (
+            <>
+              <Text style={styles.productTitle}>
+                {product.name} <Text style={styles.titleSize}>({displaySize})</Text>
               </Text>
-            </View>
 
-            <View style={styles.timingGrid}>
-              <TouchableOpacity
-                style={[
-                  styles.timeCard,
-                  deliveryTime === "Morning (7:00 AM)" && styles.timeCardActive,
-                ]}
-                onPress={() => setDeliveryTime("Morning (7:00 AM)")}
-                activeOpacity={0.8}
-              >
-                <Feather
-                  name="sunrise"
-                  size={18}
-                  color={
-                    deliveryTime === "Morning (7:00 AM)"
-                      ? COLORS.primary
-                      : COLORS.textSecondary
-                  }
-                />
-                <Text
-                  style={[
-                    styles.timeCardText,
-                    deliveryTime === "Morning (7:00 AM)" &&
-                      styles.timeCardTextActive,
-                  ]}
-                >
-                  Morning (7:00 AM)
+              <View style={styles.priceContainer}>
+                <Text style={styles.priceText}>
+                  NPR {basePrice} <Text style={styles.perUnitText}>/ unit</Text>
                 </Text>
+                {showDiscount && (
+                  <View style={styles.discountRow}>
+                    <Text style={[styles.cutPriceText, { color: "#E2B254" }]}>NPR {cutPrice}</Text>
+                    <Text style={[styles.discountPercentText, { color: "#E2B254" }]}>-{discountPercent}%</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Variants / Pack Size */}
+              {product.variants && product.variants.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.smallLabel}>PACK SIZE</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.variantRow}
+                  >
+                    {product.variants.map((variant: any, index: number) => {
+                      const isActive = index === activeVariantIndex;
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={[
+                            styles.variantBtn,
+                            isActive && styles.variantBtnActive,
+                          ]}
+                          onPress={() => setActiveVariantIndex(index)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.variantText,
+                              isActive && styles.variantTextActive,
+                            ]}
+                          >
+                            {variant.size}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
+              <View style={styles.divider} />
+
+              {/* --- MULTI-PRODUCT SUBSCRIPTION REDIRECT BANNER --- */}
+              <TouchableOpacity
+                style={styles.subscribeBanner}
+                activeOpacity={0.9}
+                onPress={() => router.push("/plan/curate" as any)}
+              >
+                <View style={styles.subscribeBannerIcon}>
+                  <Feather name="calendar" size={20} color="#E2B254" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subscribeBannerTitle}>
+                    BUILD RECURRING SUBSCRIPTION
+                  </Text>
+                  <Text style={styles.subscribeBannerSub}>
+                    Subscribe to Daily or Weekly plans and combine multiple products across days.
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={20} color="#FFF" />
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.timeCard,
-                  deliveryTime === "Evening (5:00 PM)" && styles.timeCardActive,
-                ]}
-                onPress={() => setDeliveryTime("Evening (5:00 PM)")}
-                activeOpacity={0.8}
-              >
-                <Feather
-                  name="sunset"
-                  size={18}
-                  color={
-                    deliveryTime === "Evening (5:00 PM)"
-                      ? COLORS.primary
-                      : COLORS.textSecondary
-                  }
-                />
-                <Text
-                  style={[
-                    styles.timeCardText,
-                    deliveryTime === "Evening (5:00 PM)" &&
-                      styles.timeCardTextActive,
-                  ]}
-                >
-                  Evening (5:00 PM)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.infoSection}>
-          <Text style={styles.sectionHeader}>PRODUCT HIGHLIGHTS</Text>
-          <View style={styles.bulletList}>
-            {featurePoints.map((point: string, idx: number) => (
-              <View key={idx} style={styles.bulletRow}>
-                <View style={styles.bullet} />
-                <Text style={styles.bulletText}>
-                  {point.trim().replace(/\.$/, "")}.
+              <View style={styles.infoSection}>
+                <Text style={styles.sectionHeader}>PRODUCT DESCRIPTION</Text>
+                <Text style={styles.bodyText}>
+                  {product.description ||
+                    "Premium authentic dairy. Firm yet tender, this high-protein staple is a versatile addition to any meal."}
                 </Text>
               </View>
-            ))}
-          </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
-      <View style={styles.bottomActionBar}>
-        <View style={styles.quantitySelector}>
-          <TouchableOpacity
-            onPress={() => setQuantity(Math.max(1, quantity - 1))}
-            style={styles.qtyBtn}
+      {/* Bottom One-Time Buy Bar */}
+      {product && !loading && (
+        <View style={styles.bottomActionBar}>
+        <View style={styles.quantityContainer}>
+          <Text style={styles.qtyLabel}>Quantity</Text>
+          <View
+            style={[
+              styles.quantitySelector,
+              isUnavailable && { opacity: 0.45 },
+            ]}
           >
-            <Feather name="minus" size={18} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.qtyText}>{quantity}</Text>
-          <TouchableOpacity
-            onPress={() => setQuantity(quantity + 1)}
-            style={styles.qtyBtn}
-          >
-            <Feather name="plus" size={18} color={COLORS.text} />
-          </TouchableOpacity>
+            <TouchableOpacity
+              disabled={isUnavailable}
+              onPress={() => setQuantity(Math.max(1, quantity - 1))}
+              style={styles.qtyBtn}
+            >
+              <Feather name="minus" size={16} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.qtyText}>{quantity}</Text>
+            <TouchableOpacity
+              disabled={isUnavailable || quantity >= currentStock}
+              onPress={() => setQuantity(quantity + 1)}
+              style={styles.qtyBtn}
+            >
+              <Feather name="plus" size={16} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <TouchableOpacity
           style={[
             styles.addCartBtn,
-            {
-              backgroundColor:
-                selectedPlan === "One Time" ? "#001F3F" : COLORS.primary,
-            },
+            isUnavailable && { backgroundColor: "#CCCCCC" },
           ]}
           activeOpacity={0.9}
+          disabled={isUnavailable}
           onPress={handleAddToCart}
         >
+          <Feather
+            name="shopping-cart"
+            size={18}
+            color="#FFF"
+            style={{ marginRight: 8 }}
+          />
           <Text style={styles.addCartText}>
-            {selectedPlan === "One Time"
-              ? "ADD TO CART"
-              : `SUBSCRIBE ${selectedPlan.toUpperCase()}`}
+            {isOutOfStock ? "OUT OF STOCK" : "ADD TO CART"}
           </Text>
-          <Text style={styles.addCartPrice}>NPR {grandTotal}</Text>
         </TouchableOpacity>
       </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -401,6 +283,7 @@ export default function ProductDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: "600" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -419,8 +302,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textTransform: "uppercase",
   },
-  scrollContent: { paddingBottom: 100 },
-
+  scrollContent: { paddingBottom: 110 },
   imageWrapper: {
     width: "100%",
     height: 280,
@@ -430,25 +312,56 @@ const styles = StyleSheet.create({
     padding: SPACING.l,
   },
   mainImage: { width: "100%", height: "100%" },
-
-  detailsContainer: { padding: SPACING.l, paddingBottom: SPACING.m },
+  detailsContainer: { padding: SPACING.l },
   productTitle: {
     fontSize: 24,
     fontWeight: "900",
-    color: COLORS.primary,
+    color: "#002147",
     textTransform: "uppercase",
-    marginBottom: SPACING.s,
+    marginBottom: 4,
   },
-  titleSize: { fontSize: 18, color: COLORS.primary, fontWeight: "700" },
+  titleSize: { fontSize: 18, color: "#002147", fontWeight: "700" },
+  priceContainer: {
+    marginBottom: SPACING.m,
+  },
   priceText: {
     fontSize: 28,
     fontWeight: "900",
-    color: COLORS.text,
-    marginVertical: SPACING.s,
+    color: "#9e111a",
+  },
+  discountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 8,
+  },
+  cutPriceText: {
+    fontSize: 16,
+    color: "#888",
+    textDecorationLine: "line-through",
+  },
+  discountPercentText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1A1A1A",
   },
   perUnitText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: "600" },
-
-  section: { marginBottom: SPACING.m },
+  curdNoticeBox: {
+    flexDirection: "row",
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: RADIUS.medium,
+    marginBottom: SPACING.l,
+  },
+  curdNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 18,
+  },
+  section: { marginBottom: SPACING.l },
   smallLabel: {
     fontSize: 11,
     fontWeight: "800",
@@ -456,7 +369,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     letterSpacing: 0.5,
   },
-
   variantRow: { flexDirection: "row", gap: 10 },
   variantBtn: {
     borderWidth: 1,
@@ -466,137 +378,52 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.medium,
     backgroundColor: "#FFF",
   },
-  variantBtnActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
+  variantBtnActive: { backgroundColor: "#002147", borderColor: "#002147" },
   variantText: { fontSize: 13, fontWeight: "700", color: COLORS.text },
   variantTextActive: { color: "#FFF" },
-
-  /* Plan Grid */
-  planSection: { marginTop: SPACING.m },
-  planGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  planCard: {
-    width: "48%",
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.medium,
-    padding: SPACING.m,
+  divider: { height: 1, backgroundColor: "#F0F0F0", marginVertical: SPACING.m },
+  subscribeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#002147",
+    padding: 16,
+    borderRadius: RADIUS.large,
+    marginBottom: SPACING.l,
+    gap: 12,
+  },
+  subscribeBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-  }, // overflow added for corner badge
-  planCardActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
   },
-  planCardText: {
+  subscribeBannerTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#FFF",
+    letterSpacing: 0.5,
+  },
+  subscribeBannerSub: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  infoSection: { marginBottom: SPACING.l },
+  sectionHeader: {
     fontSize: 13,
     fontWeight: "800",
-    color: COLORS.textSecondary,
-    marginTop: 4,
-  },
-  planCardTextActive: { color: "#FFF" },
-  planSubText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  planSubTextActive: { color: "rgba(255,255,255,0.8)" },
-
-  // 🔥 NEW: Styles for the Offer Badge
-  offerBadge: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    backgroundColor: "#27AE60",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderBottomLeftRadius: 8,
-    zIndex: 1,
-  },
-  offerBadgeText: {
-    color: "#FFF",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-
-  /* Timing Section */
-  timingSection: { marginTop: SPACING.l },
-  timingInfoBox: {
-    flexDirection: "row",
-    backgroundColor: "#FFF0F0",
-    padding: 12,
-    borderRadius: RADIUS.medium,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(161,18,23,0.1)",
-  },
-  timingInfoText: {
-    flex: 1,
-    fontSize: 12,
-    color: COLORS.primary,
-    lineHeight: 18,
-  },
-  timingGrid: { flexDirection: "row", gap: 10 },
-  timeCard: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.medium,
-    backgroundColor: "#FAFAFA",
-  },
-  timeCardActive: { borderColor: COLORS.primary, backgroundColor: "#FFFDFD" },
-  timeCardText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.textSecondary,
-  },
-  timeCardTextActive: { color: COLORS.primary },
-
-  divider: { height: 6, backgroundColor: "#F4F4F4", marginVertical: SPACING.m },
-
-  infoSection: { paddingHorizontal: SPACING.l, paddingBottom: SPACING.l },
-  sectionHeader: {
-    fontSize: 14,
-    fontWeight: "900",
     color: "#001F3F",
-    letterSpacing: 0.5,
-    marginBottom: SPACING.m,
-    marginTop: SPACING.s,
+    letterSpacing: 1,
+    marginBottom: SPACING.s,
   },
-
-  bulletList: { marginTop: 4 },
-  bulletRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-    paddingRight: 10,
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.primary,
-    marginTop: 8,
-    marginRight: 12,
-  },
-  bulletText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#444",
+  bodyText: {
+    fontSize: 13,
+    color: "#555",
     lineHeight: 22,
-    fontWeight: "500",
   },
-
   bottomActionBar: {
     position: "absolute",
     bottom: 0,
@@ -614,8 +441,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
   },
+  quantityContainer: { flex: 0.35 },
+  qtyLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
   quantitySelector: {
-    flex: 0.35,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -623,27 +458,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.medium,
+    paddingHorizontal: 4,
   },
-  qtyBtn: { padding: 12 },
+  qtyBtn: { padding: 10 },
   qtyText: { fontSize: 16, fontWeight: "900", color: COLORS.text },
   addCartBtn: {
     flex: 0.65,
-    flexDirection: "column",
+    flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#9e111a",
     borderRadius: RADIUS.medium,
-    paddingVertical: 10,
+    paddingVertical: 14,
   },
   addCartText: {
     color: "#FFF",
     fontSize: 13,
     fontWeight: "900",
     letterSpacing: 0.5,
-  },
-  addCartPrice: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 2,
   },
 });

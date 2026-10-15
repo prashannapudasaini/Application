@@ -77,6 +77,13 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+  name="products"
+  options={{
+    href: null, // 🔥 THIS IS THE MAGIC LINE: It hides the icon from the bottom bar!
+    title: "Products", 
+  }}
+/>
     </Tabs>
   );
 }

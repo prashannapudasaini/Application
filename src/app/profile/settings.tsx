@@ -1,6 +1,6 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Keyboard,
   Modal,
@@ -14,7 +14,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../_layout";
+import { useAuth } from "../../context/AuthContext";
+import api from "../../services/api";
 
 export default function ProfileSettingsScreen() {
   const router = useRouter();
@@ -30,10 +31,21 @@ export default function ProfileSettingsScreen() {
   const [localName, setLocalName] = useState(user?.name || "Xv");
   const [localEmail, setLocalEmail] = useState(user?.email || "");
   const [localPhone, setLocalPhone] = useState(user?.phone || "+977 ");
-  // Using Tokha, Bagmati Province as the fallback registered location
-  const [localLocation, setLocalLocation] = useState(
-    (user as any)?.location || "Tokha, Bagmati Province, Nepal",
-  );
+  const [primaryLocation, setPrimaryLocation] = useState("Loading...");
+
+  useEffect(() => {
+    if (user?.id) {
+      api.get(`/api/user/mobile-profile.php?user_id=${user.id}`)
+        .then((res) => {
+          if (res.data?.status === "success" && res.data.data.saved_addresses?.length > 0) {
+            setPrimaryLocation(res.data.data.saved_addresses[0].address);
+          } else {
+            setPrimaryLocation("No saved location");
+          }
+        })
+        .catch(() => setPrimaryLocation("Error loading location"));
+    }
+  }, [user]);
 
   // Error States
   const [emailError, setEmailError] = useState("");
@@ -92,16 +104,14 @@ export default function ProfileSettingsScreen() {
       updateUser({ phone: localPhone });
       setActiveEditingField(null);
     }
-
-    if (fieldType === "location") {
-      if (localLocation.trim().length < 3) return;
-      // Note: Make sure your AuthContext UserProfile interface supports 'location'
-      updateUser({ location: localLocation } as any);
-      setActiveEditingField(null);
-    }
   };
 
   const toggleEdit = (fieldType: "name" | "email" | "phone" | "location") => {
+    if (fieldType === "location") {
+      router.push("/profile/locations");
+      return;
+    }
+
     if (activeEditingField === fieldType) {
       handleSave(fieldType);
     } else {
@@ -295,20 +305,16 @@ export default function ProfileSettingsScreen() {
                 onPress={() => toggleEdit("location")}
                 style={styles.actionBtn}
               >
-                <Text style={styles.actionText}>
-                  {activeEditingField === "location" ? "Save" : "Edit"}
-                </Text>
+                <Text style={styles.actionText}>Edit / Manage</Text>
               </TouchableOpacity>
             </View>
             <TextInput
               style={[
                 styles.input,
-                activeEditingField === "location" && styles.inputActive,
                 Platform.OS === "web" && ({ outlineStyle: "none" } as any),
               ]}
-              value={localLocation}
-              onChangeText={setLocalLocation}
-              editable={activeEditingField === "location"}
+              value={primaryLocation}
+              editable={false}
               multiline={false}
             />
           </View>

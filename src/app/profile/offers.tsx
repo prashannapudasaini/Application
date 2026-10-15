@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { COLORS, SPACING, RADIUS } from '../../constants/theme';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { COLORS, RADIUS, SPACING } from '../../constants/theme';
 
 export default function OffersScreen() {
   const router = useRouter();

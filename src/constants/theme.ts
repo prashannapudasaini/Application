@@ -10,4 +10,4 @@ export const COLORS = {
 };
 
 export const SPACING = { xs: 4, s: 8, m: 16, l: 24, xl: 32 };
-export const RADIUS = { small: 8, medium: 12, large: 20, round: 999 };
+export const RADIUS = { small: 8, medium: 12, large: 20, round: 999, full: 999 };

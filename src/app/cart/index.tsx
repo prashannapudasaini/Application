@@ -2,23 +2,64 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
   FlatList,
-  Image,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { RADIUS, SPACING } from "../../constants/theme";
 import { useCart } from "../../context/CartContext";
+import { useState, useEffect } from "react";
+import api from "../../services/api";
+import { useDeliverySettings } from "../../hooks/useDeliverySettings";
 
 export default function CartScreen() {
   const router = useRouter();
 
   // 🔥 FIX: Pulled `removeFromCart` to exactly match your context
   const { items, updateQuantity, removeFromCart, cartTotal } = useCart();
+  const { settings: deliveryConfig, refreshSettings } = useDeliverySettings();
+
+  const [deliveryInfo, setDeliveryInfo] = useState<any>(null);
+
+  useEffect(() => {
+    refreshSettings();
+    const fetchDeliveryPreview = async () => {
+      try {
+        const res = await api.get('/api/orders/delivery_preview.php');
+        if (res.data?.status === 'success') {
+          setDeliveryInfo(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch delivery preview:", err);
+      }
+    };
+    fetchDeliveryPreview();
+  }, [refreshSettings]);
+
+  // Dynamic Free Delivery Offer Calculations
+  const isOfferActive = Boolean(Number(deliveryConfig.free_delivery_enabled));
+  const offerThreshold = Number(deliveryConfig.offer_free_threshold) || 500;
+  const originalThreshold = Number(deliveryConfig.original_free_threshold) || 1000;
+  const offerName = deliveryConfig.offer_name || "Dashain Offer";
+
+  const effectiveThreshold = isOfferActive ? offerThreshold : originalThreshold;
+  const qualifiesFreeDelivery = isOfferActive
+    ? (cartTotal || 0) >= offerThreshold
+    : originalThreshold > 0 && (cartTotal || 0) >= originalThreshold;
+
+  const amountNeeded = Math.max(0, effectiveThreshold - (cartTotal || 0));
+  const progressPercent = Math.min(
+    100,
+    Math.max(
+      0,
+      effectiveThreshold > 0 ? ((cartTotal || 0) / effectiveThreshold) * 100 : 100,
+    ),
+  );
 
   // Safety fallback
   const safeItems = items || [];
@@ -37,7 +78,9 @@ export default function CartScreen() {
         <Image
           source={{ uri: item.image }}
           style={styles.productImage}
-          resizeMode="contain"
+          contentFit="contain"
+          transition={200}
+          cachePolicy="memory-disk"
         />
       </View>
 
@@ -124,12 +167,114 @@ export default function CartScreen() {
               renderItem={renderCartItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              ListHeaderComponent={
+                <View style={{ marginBottom: SPACING.m }}>
+                  {/* Dynamic Free Delivery Progress Banner */}
+                  {isOfferActive && (
+                    <View
+                      style={[
+                        styles.promoBannerContainer,
+                        qualifiesFreeDelivery
+                          ? styles.promoBannerSuccess
+                          : styles.promoBannerPending,
+                      ]}
+                    >
+                      <View style={styles.promoBannerHeader}>
+                        <Text style={styles.promoEmoji}>
+                          {qualifiesFreeDelivery ? "🎉" : "🎁"}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                          {qualifiesFreeDelivery ? (
+                            <Text style={styles.promoBannerSuccessText}>
+                              <Text style={{ fontWeight: "900" }}>{offerName}:</Text> You've unlocked{" "}
+                              <Text style={{ fontWeight: "900" }}>FREE Delivery</Text>!
+                            </Text>
+                          ) : (
+                            <Text style={styles.promoBannerPendingText}>
+                              Add{" "}
+                              <Text style={{ fontWeight: "900", color: "#B45309" }}>
+                                NPR {amountNeeded.toLocaleString()}
+                              </Text>{" "}
+                              more for <Text style={{ fontWeight: "900" }}>FREE Delivery</Text> under{" "}
+                              <Text style={{ fontWeight: "900" }}>{offerName}</Text>!
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Visual Progress Bar */}
+                      <View style={styles.progressBarTrack}>
+                        <View
+                          style={[
+                            styles.progressBarFill,
+                            {
+                              width: `${progressPercent}%`,
+                              backgroundColor: qualifiesFreeDelivery ? "#10B981" : "#F59E0B",
+                            },
+                          ]}
+                        />
+                      </View>
+
+                      {/* Offer Info Subtitle */}
+                      <View style={styles.promoBannerFooter}>
+                        <Text style={styles.promoFooterText}>
+                          {qualifiesFreeDelivery ? (
+                            "✓ Free delivery applied to your cart"
+                          ) : (
+                            <>
+                              Special:{" "}
+                              <Text style={{ textDecorationLine: "line-through", color: "#9CA3AF" }}>
+                                NPR {originalThreshold}
+                              </Text>{" "}
+                              <Text style={{ fontWeight: "800", color: "#B45309" }}>
+                                NPR {offerThreshold}
+                              </Text>
+                            </>
+                          )}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.promoPercentBadge,
+                            qualifiesFreeDelivery && { color: "#059669", fontWeight: "900" },
+                          ]}
+                        >
+                          {qualifiesFreeDelivery ? "UNLOCKED" : `${Math.round(progressPercent)}%`}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Standard Morning Delivery Banner */}
+                  <View style={styles.deliveryBanner}>
+                    <View style={styles.deliveryBannerHeader}>
+                      <Text style={styles.deliveryBannerTitle}>
+                        🌅 Morning Delivery (7:00 AM - 10:00 AM)
+                      </Text>
+                    </View>
+                    <Text style={styles.deliveryBannerDisplay}>
+                      {deliveryInfo 
+                        ? `Your order will be delivered on ${deliveryInfo.formatted_date} between ${deliveryInfo.time_range}.`
+                        : "Calculating delivery time..."}
+                    </Text>
+                    <Text style={styles.deliveryBannerNote}>
+                      {deliveryInfo ? `* ${deliveryInfo.description}` : "* Orders must be placed at least 12 hours in advance."}
+                    </Text>
+                  </View>
+                </View>
+              }
             />
 
             {/* Bottom Checkout Bar */}
             <View style={styles.bottomBar}>
               <View style={styles.totalContainer}>
-                <Text style={styles.totalLabel}>Total Amount</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={styles.totalLabel}>Total Amount</Text>
+                  {qualifiesFreeDelivery && (
+                    <View style={styles.freeBadgePill}>
+                      <Text style={styles.freeBadgePillText}>FREE DELIVERY</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.totalPrice}>
                   {/* 🔥 FIX: Safely render toLocaleString */}
                   NPR {cartTotal?.toLocaleString() || 0}
@@ -176,6 +321,37 @@ const styles = StyleSheet.create({
 
   content: { flex: 1 },
   listContent: { padding: SPACING.m, paddingBottom: 100 },
+  
+  // Delivery Banner
+  deliveryBanner: {
+    backgroundColor: '#E8F5E9',
+    padding: 12,
+    borderRadius: RADIUS.medium,
+    marginBottom: SPACING.m,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  deliveryBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  deliveryBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#2E7D32',
+  },
+  deliveryBannerDisplay: {
+    fontSize: 13,
+    color: '#1B5E20',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  deliveryBannerNote: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
 
   // Cart Item Card
   cartItem: {
@@ -314,4 +490,78 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.medium,
   },
   shopNowText: { color: "#FFF", fontSize: 15, fontWeight: "800" },
+
+  // Promo Banner Styles
+  promoBannerContainer: {
+    padding: 12,
+    borderRadius: RADIUS.medium,
+    marginBottom: 10,
+    borderWidth: 1.5,
+  },
+  promoBannerPending: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  promoBannerSuccess: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#A7F3D0",
+  },
+  promoBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  promoEmoji: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  promoBannerPendingText: {
+    fontSize: 13,
+    color: "#78350F",
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  promoBannerSuccessText: {
+    fontSize: 13,
+    color: "#065F46",
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  progressBarTrack: {
+    height: 7,
+    backgroundColor: "rgba(0, 0, 0, 0.06)",
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  promoBannerFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  promoFooterText: {
+    fontSize: 11,
+    color: "#92400E",
+    fontWeight: "600",
+  },
+  promoPercentBadge: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#B45309",
+  },
+  freeBadgePill: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  freeBadgePillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#15803D",
+  },
 });

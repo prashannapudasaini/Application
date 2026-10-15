@@ -9,11 +9,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_ENDPOINTS } from "../../constants/api";
 import { RADIUS, SPACING } from "../../constants/theme";
+import { getCategoryVisual } from "../../constants/categoryIcons";
+// 🔥 FIXED: Use configured Axios client instead of raw fetch()
+import api from "../../services/api";
 
-// 🔥 The UI Matrix: Pairs colors with relevant icons to wrap dynamic data
 const UI_MATRIX = [
   { icon: "bottle-wine-outline", bgColor: "#EAF4F4", iconColor: "#008080" },
   { icon: "cup-water", bgColor: "#E8F5E9", iconColor: "#2E7D32" },
@@ -28,7 +31,7 @@ const UI_MATRIX = [
 interface DynamicCategory {
   id: string;
   name: string;
-  itemCount: number; // Defaults to 0 if API doesn't provide it
+  itemCount: number;
 }
 
 export default function CategoriesScreen() {
@@ -43,14 +46,23 @@ export default function CategoriesScreen() {
   const fetchCategories = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(API_ENDPOINTS.CATEGORIES);
-      const json = await response.json();
+      const endpoint = API_ENDPOINTS?.CATEGORIES || "/api/categories/index.php";
 
-      if (json.status === "success" || json.data) {
-        const mappedData = json.data.map((item: any) => ({
+      // 🔥 FIXED: Reliable cross-platform call using Axios
+      const response = await api.get(endpoint);
+      const json = response.data;
+
+      if (json?.status === "success" || Array.isArray(json?.data)) {
+        const rawList = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json)
+            ? json
+            : [];
+
+        const mappedData = rawList.map((item: any) => ({
           id: item.id.toString(),
           name: item.name,
-          itemCount: item.product_count || 0, // Maps product count if available
+          itemCount: item.product_count || 0,
         }));
         setCategories(mappedData);
       }
@@ -68,23 +80,37 @@ export default function CategoriesScreen() {
     item: DynamicCategory;
     index: number;
   }) => {
-    // Loop through the UI matrix based on the index to assign styling
-    const design = UI_MATRIX[index % UI_MATRIX.length];
+    const visual = getCategoryVisual(item.name);
+    const fallbackDesign = UI_MATRIX[index % UI_MATRIX.length];
+    const bgColor = visual?.bgColor || fallbackDesign.bgColor;
 
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.8}
-        onPress={() => console.log(`Navigating to category: ${item.name}`)}
+        onPress={() =>
+          router.push(
+            `/products?category=${encodeURIComponent(item.name.trim())}`,
+          )
+        }
       >
         <View
-          style={[styles.iconContainer, { backgroundColor: design.bgColor }]}
+          style={[styles.iconContainer, { backgroundColor: bgColor }]}
         >
-          <MaterialCommunityIcons
-            name={design.icon as any}
-            size={32}
-            color={design.iconColor}
-          />
+          {visual?.icon ? (
+            <Image
+              source={visual.icon}
+              style={styles.categoryIconImg}
+              contentFit="contain"
+              transition={150}
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name={fallbackDesign.icon as any}
+              size={32}
+              color={fallbackDesign.iconColor}
+            />
+          )}
         </View>
         <View style={styles.cardTextContainer}>
           <Text style={styles.categoryName} numberOfLines={1}>
@@ -183,6 +209,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: SPACING.m,
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.04)",
+  },
+  categoryIconImg: {
+    width: 36,
+    height: 36,
   },
   cardTextContainer: { marginBottom: 4 },
   categoryName: {

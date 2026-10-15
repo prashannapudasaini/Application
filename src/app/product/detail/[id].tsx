@@ -27,11 +27,24 @@ export default function ProductDetailScreen() {
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
-    fetch(`${BASE_URL}/api/products/get_one.php?id=${id}`)
+    fetch(`${BASE_URL}/api/products/get_one.php?id=${id}&_t=${Date.now()}`)
       .then((res) => res.json())
       .then((json) => {
         if (json.status === "success") {
-          setProduct(json.data);
+          const fetchedProduct = json.data;
+          setProduct(fetchedProduct);
+          if (fetchedProduct.variants && fetchedProduct.variants.length > 0) {
+            let cheapestIdx = 0;
+            let minPrice = Infinity;
+            fetchedProduct.variants.forEach((v: any, idx: number) => {
+              const price = Number(v.price_npr || 0);
+              if (price > 0 && price < minPrice) {
+                minPrice = price;
+                cheapestIdx = idx;
+              }
+            });
+            setActiveVariantIndex(cheapestIdx);
+          }
         }
       })
       .catch((err) => console.error("Detail Fetch Error:", err))
@@ -62,15 +75,29 @@ export default function ProductDetailScreen() {
   const displayImage = activeVariant?.image
     ? getImageUrl(activeVariant.image)
     : getImageUrl(product.image);
-  const displayPrice = activeVariant?.price_npr || product.price || 0;
+  const displayPrice = parseFloat(activeVariant?.price_npr || product.price || 0);
+  const cutPrice = activeVariant?.original_price ? parseFloat(activeVariant.original_price) : product.original_price ? parseFloat(product.original_price) : null;
   const displaySize = activeVariant?.size || product.size || "Standard";
 
+  const showDiscount = cutPrice !== null && cutPrice > displayPrice;
+  const discountPercent = showDiscount ? Math.round(((cutPrice! - displayPrice) / cutPrice!) * 100) : 0;
+
+  // --- CURD & OUT-OF-STOCK RESTRICTION LOGIC ---
+  const currentStock = parseInt(
+    String(activeVariant?.stock_quantity ?? product.stock_quantity ?? product.stock ?? 0),
+    10
+  );
+
+  const isOutOfStock = currentStock <= 0;
+  const isUnavailable = isOutOfStock;
+
   const handleAddToCart = () => {
+    if (isUnavailable) return;
     for (let i = 0; i < quantity; i++) {
       addToCart({
         id: product.id + (activeVariant ? `-${activeVariant.size}` : ""),
         name: product.name,
-        price: parseFloat(displayPrice),
+        price: Number(displayPrice),
         image: activeVariant?.image || product.image,
         size: displaySize,
       });
@@ -97,7 +124,7 @@ export default function ProductDetailScreen() {
         <View style={styles.imageWrapper}>
           <Image
             source={{ uri: displayImage }}
-            style={styles.mainImage}
+            style={[styles.mainImage, isUnavailable && { opacity: 0.55 }]}
             resizeMode="contain"
           />
         </View>
@@ -155,21 +182,48 @@ export default function ProductDetailScreen() {
             </Text>
           </View>
 
-          <Text style={styles.priceText}>NPR {displayPrice}</Text>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceText}>NPR {displayPrice}</Text>
+            {showDiscount && (
+              <View style={styles.discountRow}>
+                <Text style={styles.cutPriceText}>NPR {cutPrice}</Text>
+                <Text style={styles.discountPercentText}>-{discountPercent}%</Text>
+              </View>
+            )}
+          </View>
 
-          <TouchableOpacity style={styles.subscribeBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={[
+              styles.subscribeBtn,
+              isUnavailable && { backgroundColor: "#CCCCCC" },
+            ]}
+            disabled={isUnavailable}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (isUnavailable) return;
+              router.push("/plan/curate" as any);
+            }}
+          >
             <Feather
               name="calendar"
               size={16}
               color="#FFF"
               style={{ marginRight: 8 }}
             />
-            <Text style={styles.subscribeText}>SUBSCRIBE NOW</Text>
+            <Text style={styles.subscribeText}>
+              {isOutOfStock ? "OUT OF STOCK" : "SUBSCRIBE NOW"}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.cartActionRow}>
-            <View style={styles.quantitySelector}>
+            <View
+              style={[
+                styles.quantitySelector,
+                isUnavailable && { opacity: 0.45 },
+              ]}
+            >
               <TouchableOpacity
+                disabled={isUnavailable}
                 onPress={() => setQuantity(Math.max(1, quantity - 1))}
                 style={styles.qtyBtn}
               >
@@ -177,6 +231,7 @@ export default function ProductDetailScreen() {
               </TouchableOpacity>
               <Text style={styles.qtyText}>{quantity}</Text>
               <TouchableOpacity
+                disabled={isUnavailable || quantity >= currentStock}
                 onPress={() => setQuantity(quantity + 1)}
                 style={styles.qtyBtn}
               >
@@ -185,8 +240,12 @@ export default function ProductDetailScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.addCartBtn}
+              style={[
+                styles.addCartBtn,
+                isUnavailable && { backgroundColor: "#CCCCCC" },
+              ]}
               activeOpacity={0.8}
+              disabled={isUnavailable}
               onPress={handleAddToCart}
             >
               <Feather
@@ -195,7 +254,9 @@ export default function ProductDetailScreen() {
                 color="#FFF"
                 style={{ marginRight: 8 }}
               />
-              <Text style={styles.addCartText}>ADD TO CART</Text>
+              <Text style={styles.addCartText}>
+                {isOutOfStock ? "OUT OF STOCK" : "ADD TO CART"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -311,6 +372,22 @@ const styles = StyleSheet.create({
   },
   titleSize: { fontSize: 18, color: COLORS.primary, fontWeight: "700" },
 
+  curdNoticeBox: {
+    flexDirection: "row",
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: SPACING.m,
+  },
+  curdNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 18,
+  },
+
   section: { marginBottom: SPACING.m },
   smallLabel: {
     fontSize: 10,
@@ -349,11 +426,29 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  priceContainer: {
+    marginBottom: SPACING.l,
+  },
   priceText: {
     fontSize: 26,
     fontWeight: "900",
-    color: COLORS.text,
-    marginBottom: SPACING.l,
+    color: "#800000",
+  },
+  discountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 8,
+  },
+  cutPriceText: {
+    fontSize: 16,
+    color: "#888",
+    textDecorationLine: "line-through",
+  },
+  discountPercentText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1A1A1A",
   },
 
   subscribeBtn: {
@@ -394,7 +489,7 @@ const styles = StyleSheet.create({
   },
   addCartText: {
     color: "#FFF",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
     letterSpacing: 1,
   },

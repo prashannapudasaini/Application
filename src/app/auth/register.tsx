@@ -2,11 +2,14 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   ImageBackground,
   Keyboard,
+  KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,7 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RADIUS, SPACING } from "../../constants/theme";
-import { useAuth } from "../_layout";
+import api from "../../services/api";
 
 const { height } = Dimensions.get("window");
 const SAN_SERIF_FONT = Platform.select({
@@ -26,44 +29,38 @@ const SAN_SERIF_FONT = Platform.select({
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { login } = useAuth();
 
   // Form States
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [address, setAddress] = useState("");
 
   // Error States
   const [emailError, setEmailError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [addressError, setAddressError] = useState("");
 
-  // OTP Verification States
+  // OTP & API States
   const [isOtpStep, setIsOtpStep] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Validation Logic
-  const validateEmail = (text: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(text);
-  };
+  const validateEmail = (text: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+  const validatePhone = (text: string) =>
+    /^(?:\+977\s?)?(9\d{9})$/.test(text.trim());
+  const validatePassword = (text: string) =>
+    /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+=\[\]{};':"\\|,.<>\/?]).{8,}$/.test(
+      text,
+    );
 
-  const validatePhone = (text: string) => {
-    const phoneRegex = /^(?:\+977\s?)?(9[78]\d{8})$/;
-    return phoneRegex.test(text.trim());
-  };
-
-  // 🔥 NEW: Comprehensive Password Validation
-  const validatePassword = (text: string) => {
-    // Regex checks for: Minimum 8 characters, at least 1 uppercase, 1 number, 1 special character
-    const passwordRegex =
-      /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+=\[\]{};':"\\|,.<>\/?]).{8,}$/;
-    return passwordRegex.test(text);
-  };
-
-  // Generate dynamic helpful text based on what the password is missing
   const getPasswordHelperText = () => {
     if (!password)
       return "Required: 8+ chars, 1 uppercase, 1 number, 1 special char.";
@@ -79,8 +76,8 @@ export default function RegisterScreen() {
     return `Missing: ${missing.join(", ")}`;
   };
 
-  // Step 1: Handle initial registration click
-  const handleRequestOtp = () => {
+  // --- STEP 1: REQUEST VERIFICATION CODE ---
+  const handleRequestOtp = async () => {
     Keyboard.dismiss();
     let isValid = true;
 
@@ -95,29 +92,72 @@ export default function RegisterScreen() {
     } else {
       setEmailError("");
     }
-
     if (!validatePhone(phone)) {
-      setPhoneError("Please enter a valid Nepali phone number.");
+      setPhoneError("Please enter a valid 10-digit phone number.");
       isValid = false;
     } else {
       setPhoneError("");
     }
-
-    // 🔥 NEW: Trigger password validation check on submit
     if (!validatePassword(password)) {
       setPasswordError("Password does not meet security requirements.");
       isValid = false;
     } else {
       setPasswordError("");
     }
+    if (!address.trim()) {
+      setAddressError("Delivery address is required.");
+      isValid = false;
+    } else {
+      setAddressError("");
+    }
 
     if (isValid) {
-      setIsOtpStep(true);
+      setIsRequestingOtp(true);
+      try {
+        const response = await api.post("/api/auth/send_register_otp.php", {
+          name: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+        });
+
+        if (response.data.status === "success") {
+          setIsOtpStep(true);
+          setOtpError("");
+          setOtpCode(""); // Reset any previous codes
+        }
+      } catch (error: any) {
+        Alert.alert(
+          "Verification Error",
+          error.response?.data?.message || "Failed to send verification code."
+        );
+      } finally {
+        setIsRequestingOtp(false);
+      }
     }
   };
 
-  // Step 2: Handle final OTP verification
-  const handleVerifyAndLogin = () => {
+  // --- OPTIONAL: RESEND VERIFICATION CODE ---
+  const handleResendOtp = async () => {
+    if (isRegistering || isRequestingOtp) return;
+
+    try {
+      Alert.alert("Sending...", "Requesting a new verification code.");
+      const response = await api.post("/api/auth/send_register_otp.php", {
+        name: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+      });
+
+      if (response.data.status === "success") {
+        Alert.alert("Sent", "A new code has been sent to your email.");
+      }
+    } catch (error: any) {
+      setOtpError(error.response?.data?.message || "Failed to resend code.");
+    }
+  };
+
+  // --- STEP 2: VERIFY AND CREATE ACCOUNT ---
+  const handleVerifyAndRegister = async () => {
     Keyboard.dismiss();
 
     if (otpCode.length < 6) {
@@ -125,34 +165,57 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (otpCode !== "123456") {
-      setOtpError("Invalid code. Please try again. (Hint: use 123456)");
-      return;
-    }
-
     setOtpError("");
+    setIsRegistering(true);
 
-    login({
-      name: fullName.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-    });
+    try {
+      const response = await api.post("/api/auth/register.php", {
+        name: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        password: password,
+        address: address.trim(),
+        otp: otpCode, // 🔥 Passing the Real OTP to Backend
+      });
+
+      if (response.data.status === "success") {
+        Alert.alert(
+          "Welcome!",
+          response.data.message || "Account verified and created successfully. Please sign in."
+        );
+        router.replace("/auth/login");
+      }
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        setOtpError(error.response.data.message || "Invalid or expired code.");
+      } else {
+        setOtpError("Network error. Could not connect to the server.");
+      }
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   return (
     <ImageBackground
-      source={{
-        uri: "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=800&q=80",
-      }}
+      source={require("../../../assets/images/register_bg.jpg")}
       style={styles.backgroundImage}
+      resizeMode="cover"
     >
       <View style={styles.darkOverlay} />
       <SafeAreaView style={styles.safeContainer}>
-        <View style={styles.formContainer}>
+        <KeyboardAvoidingView 
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
+          style={{ flex: 1 }}
+        >
+          <ScrollView 
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingVertical: SPACING.xl }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.formContainer}>
           {!isOtpStep ? (
-            // ==========================================
-            // REGISTRATION FORM VIEW
-            // ==========================================
             <>
               <Text style={[styles.brandTitle, { fontFamily: SAN_SERIF_FONT }]}>
                 Join Sitaram
@@ -163,12 +226,7 @@ export default function RegisterScreen() {
 
               {/* Name Input */}
               <View style={styles.inputBox}>
-                <Feather
-                  name="user"
-                  size={18}
-                  color="#666"
-                  style={styles.icon}
-                />
+                <Feather name="user" size={18} color="#666" style={styles.icon} />
                 <TextInput
                   style={[
                     styles.inputField,
@@ -182,13 +240,7 @@ export default function RegisterScreen() {
               </View>
 
               {/* Email Input */}
-              <View
-                style={[
-                  styles.inputBox,
-                  emailError ? styles.inputErrorBorder : null,
-                  { marginTop: 4 },
-                ]}
-              >
+              <View style={[styles.inputBox, emailError ? styles.inputErrorBorder : null]}>
                 <Feather
                   name="mail"
                   size={18}
@@ -211,18 +263,10 @@ export default function RegisterScreen() {
                   keyboardType="email-address"
                 />
               </View>
-              {emailError ? (
-                <Text style={styles.errorText}>{emailError}</Text>
-              ) : null}
+              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
               {/* Phone Input */}
-              <View
-                style={[
-                  styles.inputBox,
-                  phoneError ? styles.inputErrorBorder : null,
-                  { marginTop: emailError ? 0 : 4 },
-                ]}
-              >
+              <View style={[styles.inputBox, phoneError ? styles.inputErrorBorder : null]}>
                 <Feather
                   name="phone"
                   size={18}
@@ -234,7 +278,7 @@ export default function RegisterScreen() {
                     styles.inputField,
                     Platform.OS === "web" && ({ outlineStyle: "none" } as any),
                   ]}
-                  placeholder="+977"
+                  placeholder="Phone Number"
                   placeholderTextColor="#777"
                   value={phone}
                   onChangeText={(val) => {
@@ -242,21 +286,37 @@ export default function RegisterScreen() {
                     setPhoneError("");
                   }}
                   keyboardType="phone-pad"
-                  maxLength={14}
+                  maxLength={10}
                 />
               </View>
-              {phoneError ? (
-                <Text style={styles.errorText}>{phoneError}</Text>
-              ) : null}
+              {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
+
+              {/* Address Input */}
+              <View style={[styles.inputBox, addressError ? styles.inputErrorBorder : null]}>
+                <Feather
+                  name="map-pin"
+                  size={18}
+                  color={addressError ? "#D32F2F" : "#666"}
+                  style={styles.icon}
+                />
+                <TextInput
+                  style={[
+                    styles.inputField,
+                    Platform.OS === "web" && ({ outlineStyle: "none" } as any),
+                  ]}
+                  placeholder="Delivery Address"
+                  placeholderTextColor="#777"
+                  value={address}
+                  onChangeText={(val) => {
+                    setAddress(val);
+                    setAddressError("");
+                  }}
+                />
+              </View>
+              {addressError ? <Text style={styles.errorText}>{addressError}</Text> : null}
 
               {/* Password Input */}
-              <View
-                style={[
-                  styles.inputBox,
-                  passwordError ? styles.inputErrorBorder : null,
-                  { marginTop: phoneError ? 0 : 4, marginBottom: 4 },
-                ]}
-              >
+              <View style={[styles.inputBox, passwordError ? styles.inputErrorBorder : null]}>
                 <Feather
                   name="lock"
                   size={18}
@@ -275,11 +335,12 @@ export default function RegisterScreen() {
                     setPassword(val);
                     setPasswordError("");
                   }}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                 />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                  <Feather name={showPassword ? "eye-off" : "eye"} size={18} color={passwordError ? "#D32F2F" : "#666"} />
+                </TouchableOpacity>
               </View>
-
-              {/* 🔥 NEW: Dynamic Password Helper Text */}
               <Text
                 style={[
                   styles.helperText,
@@ -297,50 +358,52 @@ export default function RegisterScreen() {
                 style={styles.primaryBtn}
                 activeOpacity={0.9}
                 onPress={handleRequestOtp}
+                disabled={isRequestingOtp}
               >
-                <Text style={styles.primaryBtnText}>REQUEST OTP</Text>
+                {isRequestingOtp ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>REQUEST OTP</Text>
+                )}
               </TouchableOpacity>
 
               <View style={styles.footerRow}>
                 <Text style={styles.footerText}>Already registered? </Text>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.replace("/auth/login")}>
                   <Text style={styles.linkText}>Log In</Text>
                 </TouchableOpacity>
               </View>
             </>
           ) : (
             // ==========================================
-            // OTP VERIFICATION VIEW
+            // STEP 2: OTP VERIFICATION
             // ==========================================
-            <>
+            <View style={styles.otpViewContainer}>
               <TouchableOpacity
                 onPress={() => setIsOtpStep(false)}
                 style={styles.backIcon}
+                disabled={isRegistering}
               >
                 <Feather name="arrow-left" size={24} color="#1A1A1A" />
               </TouchableOpacity>
 
-              <View style={{ alignItems: "center", marginBottom: SPACING.l }}>
+              <View style={styles.otpHeaderBox}>
                 <MaterialCommunityIcons
                   name="shield-check-outline"
-                  size={48}
+                  size={54}
                   color="#800000"
                 />
                 <Text
                   style={[
                     styles.brandTitle,
-                    { fontFamily: SAN_SERIF_FONT, marginTop: 12 },
+                    { fontFamily: SAN_SERIF_FONT, marginTop: 16 },
                   ]}
                 >
                   Verify Account
                 </Text>
                 <Text style={styles.welcomeSubtitle}>
                   We've sent a 6-digit verification code to{"\n"}
-                  <Text style={{ fontWeight: "bold", color: "#1A1A1A" }}>
-                    {phone}
-                  </Text>{" "}
-                  and{" "}
-                  <Text style={{ fontWeight: "bold", color: "#1A1A1A" }}>
+                  <Text style={{ fontWeight: "800", color: "#1A1A1A" }}>
                     {email}
                   </Text>
                 </Text>
@@ -348,82 +411,89 @@ export default function RegisterScreen() {
 
               <View
                 style={[
-                  styles.inputBox,
-                  otpError ? styles.inputErrorBorder : null,
-                  { justifyContent: "center" },
+                  styles.otpInputContainer,
+                  otpError ? { borderColor: "#D32F2F" } : null,
                 ]}
               >
                 <TextInput
                   style={[
-                    styles.inputField,
-                    { textAlign: "center", fontSize: 20, letterSpacing: 8 },
+                    styles.otpInputField,
                     Platform.OS === "web" && ({ outlineStyle: "none" } as any),
                   ]}
-                  placeholder="------"
+                  placeholder="- - - - - -"
                   placeholderTextColor="#CCC"
                   value={otpCode}
                   onChangeText={(val) => {
-                    setOtpCode(val);
+                    setOtpCode(val.replace(/[^0-9]/g, ""));
                     setOtpError("");
                   }}
                   keyboardType="number-pad"
                   maxLength={6}
+                  editable={!isRegistering}
                 />
               </View>
+
               {otpError ? (
-                <Text style={[styles.errorText, { textAlign: "center" }]}>
-                  {otpError}
-                </Text>
+                <Text style={styles.otpErrorText}>{otpError}</Text>
               ) : null}
 
               <TouchableOpacity
-                style={styles.primaryBtn}
+                style={[styles.primaryBtn, isRegistering && { opacity: 0.7 }]}
                 activeOpacity={0.9}
-                onPress={handleVerifyAndLogin}
+                onPress={handleVerifyAndRegister}
+                disabled={isRegistering}
               >
-                <Text style={styles.primaryBtnText}>VERIFY & LOGIN</Text>
+                {isRegistering ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>VERIFY & REGISTER</Text>
+                )}
               </TouchableOpacity>
 
               <View style={styles.footerRow}>
                 <Text style={styles.footerText}>Didn't receive the code? </Text>
-                <TouchableOpacity
-                  onPress={() =>
-                    Alert.alert("Resent", "A new code has been sent.")
-                  }
-                >
-                  <Text style={styles.linkText}>Resend</Text>
+                <TouchableOpacity onPress={handleResendOtp} disabled={isRegistering || isRequestingOtp}>
+                  <Text
+                    style={[
+                      styles.linkText,
+                      {
+                        textDecorationLine: "none",
+                        borderBottomWidth: 1,
+                        borderBottomColor: "#800000",
+                      },
+                    ]}
+                  >
+                    Resend
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </>
+            </View>
           )}
-        </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: { flex: 1, width: "100%", height: height },
+  backgroundImage: { flex: 1, width: "100%", height: "100%" },
   darkOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.45)",
   },
   safeContainer: {
     flex: 1,
-    justifyContent: "center",
     paddingHorizontal: SPACING.xl,
   },
   formContainer: {
     backgroundColor: "rgba(255, 255, 255, 0.98)",
     padding: SPACING.xl,
     borderRadius: RADIUS.large,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
     elevation: 8,
+    boxShadow: "0px 10px 15px rgba(0, 0, 0, 0.25)",
   },
-  backIcon: { position: "absolute", top: 20, left: 20, zIndex: 10, padding: 8 },
   brandTitle: {
     fontSize: 28,
     fontWeight: "300",
@@ -467,7 +537,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 12,
     marginLeft: 4,
-  }, // 🔥 NEW
+  },
   icon: { marginRight: SPACING.s },
   inputField: { flex: 1, fontSize: 15, color: "#1A1A1A" },
   primaryBtn: {
@@ -489,10 +559,40 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xl,
   },
   footerText: { color: "#555", fontSize: 13, fontWeight: "500" },
-  linkText: {
-    color: "#800000",
-    fontSize: 13,
-    fontWeight: "800",
-    textDecorationLine: "underline",
+  linkText: { color: "#800000", fontSize: 13, fontWeight: "900" },
+  otpViewContainer: { position: "relative", paddingTop: SPACING.m },
+  backIcon: {
+    position: "absolute",
+    top: -10,
+    left: -10,
+    zIndex: 10,
+    padding: 8,
+  },
+  otpHeaderBox: { alignItems: "center", marginBottom: SPACING.m },
+  otpInputContainer: {
+    borderWidth: 1,
+    borderColor: "#EAEAEA",
+    borderRadius: RADIUS.medium,
+    backgroundColor: "#FAFAFA",
+    height: 60,
+    marginBottom: SPACING.m,
+    justifyContent: "center",
+  },
+  otpInputField: {
+    textAlign: "center",
+    fontSize: 24,
+    letterSpacing: 10,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    width: "100%",
+    height: "100%",
+  },
+  otpErrorText: {
+    color: "#D32F2F",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: SPACING.m,
+    marginTop: -4,
   },
 });

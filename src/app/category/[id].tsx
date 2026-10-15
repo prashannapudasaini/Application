@@ -19,6 +19,7 @@ interface FormattedProduct {
   name: string;
   size: string;
   price: number;
+  original_price?: number;
   image: string;
 }
 
@@ -48,15 +49,25 @@ export default function CategoryProductsScreen() {
           (item: any) => item.category_id == id,
         );
         const mappedProducts = filteredProducts.map((item: any) => {
-          const firstVariant =
-            item.variants && item.variants.length > 0 ? item.variants[0] : null;
+          let cheapestVariant = item.variants && item.variants.length > 0 ? item.variants[0] : null;
+          if (item.variants && item.variants.length > 0) {
+            cheapestVariant = item.variants.reduce((prev: any, curr: any) => {
+              const prevPrice = Number(prev.price_npr || 0);
+              const currPrice = Number(curr.price_npr || 0);
+              if (prevPrice === 0) return curr;
+              if (currPrice === 0) return prev;
+              return prevPrice < currPrice ? prev : curr;
+            }, item.variants[0]);
+          }
+          const price = cheapestVariant ? parseFloat(cheapestVariant.price_npr) : parseFloat(item.price || 0);
+          const originalPrice = cheapestVariant?.original_price ? parseFloat(cheapestVariant.original_price) : (item.original_price ? parseFloat(item.original_price) : null);
+
           return {
             id: item.id.toString(),
             name: item.name,
-            size: firstVariant ? firstVariant.size : "Standard",
-            price: firstVariant
-              ? parseFloat(firstVariant.price_npr)
-              : parseFloat(item.price || 0),
+            size: cheapestVariant ? cheapestVariant.size : "Standard",
+            price: price,
+            original_price: originalPrice,
             image: getImageUrl(item.image),
           };
         });
@@ -80,33 +91,45 @@ export default function CategoryProductsScreen() {
     }
   };
 
-  const renderGridCard = ({ item }: { item: FormattedProduct }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.9}
-      onPress={() => router.push(`/product/${item.id}`)}
-    >
-      <View style={styles.imageWrapper}>
-        <Image
-          source={{ uri: item.image }}
-          style={styles.productImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.cardBody}>
-        <Text style={styles.productName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={styles.productSize}>{item.size}</Text>
-        <View style={styles.footerRow}>
-          <Text style={styles.productPrice}>NPR {item.price}</Text>
-          <TouchableOpacity style={styles.addBtn} activeOpacity={0.8}>
-            <Feather name="plus" size={16} color="#FFF" />
-          </TouchableOpacity>
+  const renderGridCard = ({ item }: { item: FormattedProduct }) => {
+    const showDiscount = item.original_price !== undefined && item.original_price !== null && item.original_price > item.price;
+    const discountPercent = showDiscount ? Math.round(((item.original_price! - item.price) / item.original_price!) * 100) : 0;
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.9}
+        onPress={() => router.push(`/product/${item.id}`)}
+      >
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{ uri: item.image }}
+            style={styles.productImage}
+            resizeMode="contain"
+          />
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.cardBody}>
+          <Text style={styles.productName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={styles.productSize}>{item.size}</Text>
+          <View style={styles.footerRow}>
+            <View style={styles.priceContainer}>
+              <Text style={styles.productPrice}>NPR {item.price}</Text>
+              {showDiscount && (
+                <View style={styles.discountRow}>
+                  <Text style={styles.cutPriceText}>NPR {item.original_price}</Text>
+                  <Text style={styles.discountPercentText}>-{discountPercent}%</Text>
+                </View>
+              )}
+            </View>
+            <TouchableOpacity style={styles.addBtn} activeOpacity={0.8}>
+              <Feather name="plus" size={16} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -230,9 +253,29 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-end",
   },
-  productPrice: { fontSize: 16, fontWeight: "900", color: "#A11217" },
+  priceContainer: {
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  productPrice: { fontSize: 16, fontWeight: "900", color: "#800000" },
+  discountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 4,
+  },
+  cutPriceText: {
+    fontSize: 11,
+    color: "#888",
+    textDecorationLine: "line-through",
+  },
+  discountPercentText: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: "#1A1A1A",
+  },
   addBtn: {
     backgroundColor: "#A11217",
     width: 32,

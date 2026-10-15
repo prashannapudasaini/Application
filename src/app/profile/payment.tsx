@@ -19,3 +19,31 @@ export default function PaymentScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FAF8F5',
+    padding: SPACING.l,
+    justifyContent: 'center',
+  },
+  totalText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: SPACING.l,
+    textAlign: 'center',
+  },
+  methodBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: RADIUS.medium,
+    alignItems: 'center',
+    marginBottom: SPACING.m,
+  },
+  methodText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

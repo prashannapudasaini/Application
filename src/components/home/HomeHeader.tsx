@@ -12,7 +12,6 @@ import {
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
 import { useCart } from "../../context/CartContext";
 
-// 🔥 1. Define props so the Home Screen can control the search text
 interface HomeHeaderProps {
   searchQuery?: string;
   onSearchChange?: (text: string) => void;
@@ -25,7 +24,6 @@ export default function HomeHeader({
   const router = useRouter();
   const { items, walletBalance } = useCart();
 
-  // Safety check to ensure items array exists before reducing
   const safeItems = items || [];
   const cartItemCount = safeItems.reduce(
     (total, item) => total + item.quantity,
@@ -35,15 +33,21 @@ export default function HomeHeader({
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
+        {/* Updated Logo & Brand Text Container */}
         <View style={styles.logoContainer}>
           <Image
             source={require("../../../assets/images/logo.png")}
             style={styles.logoImage}
             resizeMode="contain"
           />
+          <View style={styles.brandTextContainer}>
+            <Text style={styles.brandTitle}>Sita Ram</Text>
+            <Text style={styles.brandSubtitle}>GOKUL MILKS KATHMANDU</Text>
+          </View>
         </View>
 
         <View style={styles.actionsContainer}>
+
           <TouchableOpacity
             style={styles.cartButton}
             activeOpacity={0.8}
@@ -64,7 +68,6 @@ export default function HomeHeader({
           >
             <Ionicons name="wallet-outline" size={14} color={COLORS.primary} />
             <Text style={styles.walletText}>
-              {/* 🔥 FIX: Added safety fallback to prevent undefined crash */}
               NPR {(walletBalance || 0).toLocaleString()}
             </Text>
           </TouchableOpacity>
@@ -80,7 +83,6 @@ export default function HomeHeader({
         />
         <TextInput
           placeholder="Search for milk, paneer, ghee..."
-          // 🔥 2. Bind the input to the props passed from HomeScreen
           value={searchQuery}
           onChangeText={onSearchChange}
           style={[
@@ -88,7 +90,7 @@ export default function HomeHeader({
             Platform.OS === "web" && ({ outlineStyle: "none" } as any),
           ]}
           placeholderTextColor={COLORS.textSecondary}
-          clearButtonMode="while-editing" // Adds a handy 'x' button on iOS to clear search
+          clearButtonMode="while-editing"
         />
       </View>
     </View>
@@ -110,11 +112,30 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     flex: 1,
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
   },
   logoImage: {
-    width: 120,
-    height: 40,
+    width: 45, // Scaled down to make room for text
+    height: 45,
+    marginRight: 8,
+  },
+  brandTextContainer: {
+    justifyContent: "center",
+  },
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1A1A1A",
+    // Uses platform-specific serif fonts to match the image style without needing custom font files
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+  },
+  brandSubtitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: COLORS.primary, // Using your theme's primary color (assuming it's the red/maroon)
+    letterSpacing: 0.5,
+    marginTop: -2,
   },
   actionsContainer: {
     flexDirection: "row",

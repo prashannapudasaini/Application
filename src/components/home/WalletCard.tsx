@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS, RADIUS, SPACING } from "../../constants/theme";
 
@@ -17,7 +17,7 @@ export default function WalletCard() {
 
       {/* Visual representation of a digital wallet icon box on the right */}
       <View style={styles.iconBox}>
-        <Feather name="wallet" size={20} color="#FFFFFF" />
+        <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
       </View>
     </View>
   );

@@ -1,4 +1,7 @@
-import { createContext, ReactNode, useContext, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
+import api from "../services/api";
+import { ENDPOINTS } from "../constants/api";
 
 export interface CartItem {
   id: string;
@@ -7,7 +10,7 @@ export interface CartItem {
   price: number;
   image: string;
   size: string;
-  plan: string;
+  plan?: string;
   quantity: number;
 }
 
@@ -25,6 +28,10 @@ interface CartContextType {
   items: CartItem[];
   orderHistory: OrderItem[];
   walletBalance: number;
+
+  // 🔥 NEW: Added function to interface to sync DB balance
+  setInitialWalletBalance: (balance: number) => void;
+
   loadWallet: (amount: number) => void;
   addToCart: (
     item: Omit<CartItem, "cartItemId" | "quantity"> & { quantity?: number },
@@ -40,14 +47,37 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  // 🔥 INITIALIZED WITH EMPTY DATA (No mocks)
+  const { user } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
   const [orderHistory, setOrderHistory] = useState<OrderItem[]>([]);
   const [walletBalance, setWalletBalance] = useState<number>(0);
 
-  // Loads money and applies a 10% bonus if the amount is 2000 or more
+  // 🔥 NEW: Auto-fetch wallet balance on login globally
+  useEffect(() => {
+    if (user?.id) {
+      const endpoint = `${ENDPOINTS.MOBILE_PROFILE}?user_id=${user.id}&_t=${Date.now()}`;
+      api
+        .get(endpoint)
+        .then((res) => {
+          if (res.data?.status === "success" && res.data?.data) {
+            const fetchedBalance = Number(
+              res.data.data.balance ?? res.data.data.wallet_balance ?? 0,
+            );
+            setWalletBalance(fetchedBalance);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [user]);
+
+  // 🔥 NEW: Function to sync with Database manually
+  const setInitialWalletBalance = (balance: number) => {
+    setWalletBalance(balance);
+  };
+
+  // 🔥 UPDATED: Only 2% bonus if strictly above 3000
   const loadWallet = (amount: number) => {
-    const bonus = amount >= 2000 ? amount * 0.1 : 0;
+    const bonus = amount > 3000 ? amount * 0.02 : 0;
     setWalletBalance((prev) => prev + amount + bonus);
   };
 
@@ -55,8 +85,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     newItem: Omit<CartItem, "cartItemId" | "quantity"> & { quantity?: number },
   ) => {
     setItems((prev) => {
-      // Generates a unique ID based on the product, size, and subscription plan
-      const uniqueId = `${newItem.id}-${newItem.size}-${newItem.plan}`;
+      const plan = newItem.plan || "One-time";
+      const size = newItem.size || "Standard";
+      const uniqueId = `${newItem.id}-${size}-${plan}`;
       const exists = prev.findIndex((item) => item.cartItemId === uniqueId);
 
       if (exists >= 0) {
@@ -67,7 +98,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       return [
         ...prev,
-        { ...newItem, cartItemId: uniqueId, quantity: newItem.quantity || 1 },
+        { ...newItem, plan, size, cartItemId: uniqueId, quantity: newItem.quantity || 1 },
       ];
     });
   };
@@ -95,13 +126,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     0,
   );
 
-  // Deducts from wallet if that is the chosen payment method and saves order
+  // Deducts from wallet if that is the chosen payment method and saves order locally
   const placeOrder = (grandTotal: number, paymentMethod: string) => {
     if (items.length === 0) return "";
 
     if (paymentMethod === "wallet") {
       if (walletBalance < grandTotal) return "";
-      setWalletBalance((prev) => prev - grandTotal); // Deduct money
+      setWalletBalance((prev) => prev - grandTotal); // Deduct money locally (DB deduction happens in verify.php)
     }
 
     const newOrderId = Math.floor(10000 + Math.random() * 90000).toString();
@@ -136,6 +167,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         items,
         orderHistory,
         walletBalance,
+        setInitialWalletBalance, // <--- Added to provider
         loadWallet,
         addToCart,
         removeFromCart,
