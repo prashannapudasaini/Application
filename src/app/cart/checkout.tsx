@@ -54,14 +54,26 @@ export default function CheckoutScreen() {
   const safeItems = items || [];
   const safeTotal = cartTotal || 0; // Subtotal
 
-  // Check if cart has subscription items
-  const hasSubscriptionItems = safeItems.some(
-    (i) => i.plan && !i.plan.includes("One Time"),
-  );
+  // Check if cart has recurring subscription items (Normal buying & One-time buys are NOT recurring subscriptions)
+  const isSubscriptionItem = (item: any) => {
+    if (!item?.plan) return false;
+    const planNormalized = item.plan.toLowerCase().replace(/[\s-_]/g, "");
+    // Any one-time / single delivery variant is normal buying
+    if (planNormalized.includes("onetime") || planNormalized.includes("single")) return false;
+    return true;
+  };
+
+  const hasSubscriptionItems = safeItems.some(isSubscriptionItem);
 
   // Payment & Loading States
   const [paymentMethod, setPaymentMethod] = useState(hasSubscriptionItems ? "wallet" : "cod");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (hasSubscriptionItems && paymentMethod === "cod") {
+      setPaymentMethod("wallet");
+    }
+  }, [hasSubscriptionItems]);
 
   // Address & GIS states
   // --- Address Book States ---
@@ -144,7 +156,10 @@ export default function CheckoutScreen() {
   const offerThreshold = Number(deliveryConfig.offer_free_threshold) || 500;
   const originalThreshold = Number(deliveryConfig.original_free_threshold) || 1000;
   const feePerKm = Number(deliveryConfig.fee_per_km) || 20;
-  const offerName = deliveryConfig.offer_name || "Dashain Offer";
+  const offerName =
+    deliveryConfig.offer_name && !deliveryConfig.offer_name.toLowerCase().includes("dashain")
+      ? deliveryConfig.offer_name
+      : "Special Offer";
 
   // Check if order qualifies for promotional or standard free delivery
   const qualifiesFreeDelivery = isOfferActive
@@ -496,42 +511,50 @@ export default function CheckoutScreen() {
             </View>
           </TouchableOpacity>
 
-          <View style={styles.divider} />
-
-          {!hasSubscriptionItems && (
-            <TouchableOpacity
-              style={styles.paymentOption}
-              activeOpacity={0.7}
-              onPress={() => setPaymentMethod("cod")}
-              disabled={isProcessing}
-            >
-              <View style={styles.paymentLeft}>
-                <MaterialCommunityIcons
-                  name="cash"
-                  size={24}
-                  color={paymentMethod === "cod" ? COLORS.primary : "#666"}
-                />
-                <View style={{ marginLeft: 12 }}>
-                  <Text
-                    style={[
-                      styles.paymentName,
-                      paymentMethod === "cod" && { color: COLORS.primary },
-                    ]}
-                  >
-                    Cash on Delivery
-                  </Text>
-                  <Text style={styles.paymentSub}>Pay when you receive</Text>
-                </View>
-              </View>
-              <View
-                style={[
-                  styles.radioCircle,
-                  paymentMethod === "cod" && styles.radioCircleActive,
-                ]}
+          {!hasSubscriptionItems ? (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity
+                style={styles.paymentOption}
+                activeOpacity={0.7}
+                onPress={() => setPaymentMethod("cod")}
+                disabled={isProcessing}
               >
-                {paymentMethod === "cod" && <View style={styles.radioInner} />}
-              </View>
-            </TouchableOpacity>
+                <View style={styles.paymentLeft}>
+                  <MaterialCommunityIcons
+                    name="cash"
+                    size={24}
+                    color={paymentMethod === "cod" ? COLORS.primary : "#666"}
+                  />
+                  <View style={{ marginLeft: 12 }}>
+                    <Text
+                      style={[
+                        styles.paymentName,
+                        paymentMethod === "cod" && { color: COLORS.primary },
+                      ]}
+                    >
+                      Cash on Delivery
+                    </Text>
+                    <Text style={styles.paymentSub}>Pay when you receive</Text>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.radioCircle,
+                    paymentMethod === "cod" && styles.radioCircleActive,
+                  ]}
+                >
+                  {paymentMethod === "cod" && <View style={styles.radioInner} />}
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#F9FAFB", borderTopWidth: 1, borderColor: "#F3F4F6", flexDirection: "row", alignItems: "center" }}>
+              <Ionicons name="information-circle-outline" size={18} color="#6B7280" style={{ marginRight: 8 }} />
+              <Text style={{ fontSize: 12, color: "#6B7280", flex: 1 }}>
+                Cash on Delivery is unavailable for subscription plans. Please use Wallet Balance.
+              </Text>
+            </View>
           )}
         </View>
 

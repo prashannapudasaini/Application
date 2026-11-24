@@ -2,7 +2,7 @@
   "expo": {
     "name": "SGML",
     "slug": "sitaram-dairy-app",
-    "version": "1.0.4",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/newapplogo.png",
     "scheme": "sitaramdairyapp",
@@ -11,13 +11,13 @@
       "supportsTablet": true,
       "icon": "./assets/images/newapplogo.png",
       "bundleIdentifier": "com.sgml.app",
-      "buildNumber": "4",
+      "buildNumber": "6",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 6,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_FINE_LOCATION",

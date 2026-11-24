@@ -16,12 +16,6 @@ const { width } = Dimensions.get("window");
 
 const ORIGINAL_DATA = [
   {
-    id: "hero",
-    isFullImageBanner: true,
-    image: require("../../../assets/images/hero_banner.jpeg"),
-    duration: 10000,
-  },
-  {
     id: "0",
     tagline: "Pure. Fresh. Healthy.",
     title: "SITARAM DAIRY",

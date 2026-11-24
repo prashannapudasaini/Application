@@ -45,7 +45,10 @@ export default function CartScreen() {
   const isOfferActive = Boolean(Number(deliveryConfig.free_delivery_enabled));
   const offerThreshold = Number(deliveryConfig.offer_free_threshold) || 500;
   const originalThreshold = Number(deliveryConfig.original_free_threshold) || 1000;
-  const offerName = deliveryConfig.offer_name || "Dashain Offer";
+  const offerName =
+    deliveryConfig.offer_name && !deliveryConfig.offer_name.toLowerCase().includes("dashain")
+      ? deliveryConfig.offer_name
+      : "Special Offer";
 
   const effectiveThreshold = isOfferActive ? offerThreshold : originalThreshold;
   const qualifiesFreeDelivery = isOfferActive

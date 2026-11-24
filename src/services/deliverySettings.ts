@@ -14,7 +14,7 @@ export interface DeliverySettings {
 export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
   fee_per_km: 20,
   free_delivery_enabled: 1,
-  offer_name: "Dashain Offer",
+  offer_name: "Special Offer",
   original_free_threshold: 1000,
   offer_free_threshold: 500,
 };
@@ -35,7 +35,10 @@ AsyncStorage.getItem(STORAGE_KEY)
             parsed.free_delivery_enabled !== undefined
               ? Number(parsed.free_delivery_enabled)
               : DEFAULT_DELIVERY_SETTINGS.free_delivery_enabled,
-          offer_name: parsed.offer_name || DEFAULT_DELIVERY_SETTINGS.offer_name,
+          offer_name:
+            parsed.offer_name && !parsed.offer_name.toLowerCase().includes("dashain")
+              ? parsed.offer_name
+              : DEFAULT_DELIVERY_SETTINGS.offer_name,
           original_free_threshold:
             Number(parsed.original_free_threshold) ||
             DEFAULT_DELIVERY_SETTINGS.original_free_threshold,
@@ -65,7 +68,10 @@ export const fetchDeliverySettings = async (): Promise<DeliverySettings> => {
           data.free_delivery_enabled !== undefined
             ? Number(data.free_delivery_enabled)
             : DEFAULT_DELIVERY_SETTINGS.free_delivery_enabled,
-        offer_name: data.offer_name || DEFAULT_DELIVERY_SETTINGS.offer_name,
+        offer_name:
+          data.offer_name && !data.offer_name.toLowerCase().includes("dashain")
+            ? data.offer_name
+            : DEFAULT_DELIVERY_SETTINGS.offer_name,
         original_free_threshold:
           Number(data.original_free_threshold) ||
           DEFAULT_DELIVERY_SETTINGS.original_free_threshold,
@@ -134,7 +140,10 @@ export function calculateDeliveryFee(
     grandTotal,
     isOfferActive,
     qualifiesFreeDelivery,
-    offerName: config.offer_name || "Dashain Offer",
+    offerName:
+      config.offer_name && !config.offer_name.toLowerCase().includes("dashain")
+        ? config.offer_name
+        : "Special Offer",
     offerThreshold,
     originalThreshold,
     amountNeeded,

@@ -81,7 +81,7 @@ export default function RootLayout() {
           const localVersion =
             (isExpoGo ? Constants.expoConfig?.version : Application.nativeApplicationVersion) ||
             Constants.expoConfig?.version ||
-            "1.0.4";
+            "1.0.6";
 
           console.log("[VersionCheck] Current app version:", localVersion, "Server min:", config.android_min_version, "Server latest:", config.android_latest_version);
           

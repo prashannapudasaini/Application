@@ -7,8 +7,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Modal,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -47,7 +45,6 @@ export default function HomeScreen() {
   const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showPopup, setShowPopup] = useState(true);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -159,25 +156,6 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <Modal visible={showPopup} transparent={true} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.popupContainer}>
-            <TouchableOpacity 
-              style={styles.closePopupButton} 
-              onPress={() => setShowPopup(false)}
-              activeOpacity={0.8}
-            >
-              <Feather name="x" size={20} color="#000" />
-            </TouchableOpacity>
-            <Image 
-              source={require("../../../assets/images/popup.jpeg")} 
-              style={styles.popupImage} 
-              resizeMode="contain"
-            />
-          </View>
-        </View>
-      </Modal>
-
       <HomeHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
       <FlatList
@@ -276,34 +254,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FAF8F5" },
   scrollContent: { paddingBottom: 100 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 999,
-  },
-  popupContainer: {
-    width: "85%",
-    aspectRatio: 3/4,
-    backgroundColor: "transparent",
-    borderRadius: RADIUS.large,
-    overflow: "hidden",
-    position: "relative",
-  },
-  popupImage: {
-    width: "100%",
-    height: "100%",
-  },
-  closePopupButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    backgroundColor: "rgba(255,255,255,0.8)",
-    borderRadius: 20,
-    padding: 6,
-    zIndex: 10,
-  },
   scanBanner: {
     flexDirection: "row",
     alignItems: "center",

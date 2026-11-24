@@ -67,7 +67,91 @@ interface Task {
   status: string;
   driver_id?: string | number | null;
   items?: TaskItem[];
+  latitude?: number | string;
+  longitude?: number | string;
+  lat?: number | string;
+  lng?: number | string;
+  location?: string;
 }
+
+// --- LOCATION & MAP PINPOINT HELPERS ---
+const getCleanAddressText = (rawAddress?: string): string => {
+  if (!rawAddress) return "";
+  return rawAddress
+    .replace(/\[?\s*GPS:\s*-?\d+\.?\d*\s*,\s*-?\d+\.?\d*\s*\]?/gi, "")
+    .replace(/^[-–—\s]+/, "")
+    .trim();
+};
+
+const getTaskCoordinates = (
+  task?: Task | any | null
+): { lat: number; lng: number } | null => {
+  if (!task) return null;
+
+  // 1. Direct coordinate fields
+  const directLat = task.latitude ?? task.lat ?? task.customer_lat ?? task.delivery_lat;
+  const directLng = task.longitude ?? task.lng ?? task.customer_lng ?? task.delivery_lng;
+  if (
+    directLat !== undefined &&
+    directLng !== undefined &&
+    !isNaN(Number(directLat)) &&
+    !isNaN(Number(directLng)) &&
+    Number(directLat) !== 0
+  ) {
+    return { lat: Number(directLat), lng: Number(directLng) };
+  }
+
+  // 2. Parse from address / location string
+  const addr = task.address || task.location || "";
+  if (!addr) return null;
+
+  // [GPS: 27.71720, 85.32400]
+  const gpsRegex = /\[?\s*GPS:\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\]?/i;
+  const gpsMatch = addr.match(gpsRegex);
+  if (gpsMatch) {
+    const lat = parseFloat(gpsMatch[1]);
+    const lng = parseFloat(gpsMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  // [27.71720, 85.32400] or (27.71720, 85.32400)
+  const bracketRegex = /[\[\(]\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*[\]\)]/;
+  const bracketMatch = addr.match(bracketRegex);
+  if (bracketMatch) {
+    const lat = parseFloat(bracketMatch[1]);
+    const lng = parseFloat(bracketMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  // Coordinate pair anywhere in string (Kathmandu / Nepal ~26-31 Lat, ~80-89 Lng)
+  const generalRegex = /\b([1-3]?\d\.\d{3,8})\s*,\s*([7-9]?\d\.\d{3,8})\b/;
+  const generalMatch = addr.match(generalRegex);
+  if (generalMatch) {
+    const lat = parseFloat(generalMatch[1]);
+    const lng = parseFloat(generalMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+  }
+
+  return null;
+};
+
+const isCODMethod = (method?: string): boolean => {
+  if (!method) return true;
+  const m = method.toLowerCase().trim();
+  return m === "cod" || m.includes("cash") || m.includes("delivery");
+};
+
+const isPaidStatus = (status?: string): boolean => {
+  if (!status) return false;
+  const s = status.toLowerCase().trim();
+  return s === "paid" || s === "completed" || s === "success";
+};
 
 type NavTab = "Dashboard" | "Deliveries" | "Profile";
 type FilterTab = "All" | "Pending" | "Delivered";
@@ -141,25 +225,70 @@ export default function DeliveryDashboard() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // Helper to normalize task ID format for backend endpoints
+  const normalizeTaskId = (taskId: string | number) => {
+    const str = String(taskId).trim();
+    const isSub = str.startsWith("SUB-") || str.startsWith("sub-");
+    const rawNum = str.replace(/^(ORD-|SUB-|ord-|sub-)/i, "");
+    const numericId = parseInt(rawNum, 10) || 0;
+    const fullTaskId = isSub ? `SUB-${numericId}` : `ORD-${numericId}`;
+    return { fullTaskId, numericId, isSub };
+  };
+
   // 🔥 API Handler: Dynamically Updates Delivery Status
   const handleUpdateStatus = async (taskId: string, newStatus: string) => {
     setUpdatingTaskId(taskId);
-    try {
-      const res = await api.post("api/delivery/update_status.php", {
-        task_id: taskId,
-        status: newStatus,
-        driver_id: user?.id,
-      });
+    const { fullTaskId, numericId, isSub } = normalizeTaskId(taskId);
+    const isMarkingDelivered = newStatus.toLowerCase() === "delivered" || newStatus.toLowerCase() === "completed";
 
-      if (res.data.status === "success") {
-        setTasks((prev) =>
-          prev.map((t) => (t.task_id === taskId ? { ...t, status: newStatus } : t))
+    try {
+      const promises: Promise<any>[] = [
+        api.post("api/delivery/update_status.php", {
+          task_id: fullTaskId,
+          status: newStatus,
+          driver_id: user?.id,
+        }),
+      ];
+
+      // If marking as delivered, also update payment status to completed on backend
+      if (isMarkingDelivered) {
+        promises.push(
+          api.post("api/delivery/update_payment.php", {
+            order_id: numericId,
+            task_id: fullTaskId,
+            payment_status: "completed",
+            driver_id: user?.id,
+          }).catch(() => null)
         );
-        if (selectedTask && selectedTask.task_id === taskId) {
-          setSelectedTask((prev) => (prev ? { ...prev, status: newStatus } : null));
+
+        if (!isSub && numericId > 0) {
+          promises.push(
+            api.post("api/admin/update-payment-status.php", {
+              order_id: numericId,
+              payment_status: "completed",
+            }).catch(() => null)
+          );
         }
+      }
+
+      const [res] = await Promise.all(promises);
+
+      if (res.data?.status === "success") {
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.task_id === taskId || t.task_id === fullTaskId
+              ? { ...t, status: newStatus, ...(isMarkingDelivered ? { payment_status: "completed" } : {}) }
+              : t
+          )
+        );
+        if (selectedTask && (selectedTask.task_id === taskId || selectedTask.task_id === fullTaskId)) {
+          setSelectedTask((prev) =>
+            prev ? { ...prev, status: newStatus, ...(isMarkingDelivered ? { payment_status: "completed" } : {}) } : null
+          );
+        }
+        fetchTasks();
       } else {
-        Alert.alert("Update Failed", res.data.message || "Failed to update task status.");
+        Alert.alert("Update Failed", res.data?.message || "Failed to update task status.");
       }
     } catch (error) {
       Alert.alert("Network Error", "Unable to reach server to update status.");
@@ -171,28 +300,42 @@ export default function DeliveryDashboard() {
   // 🔥 API Handler: Dynamically Marks Payment as Paid (COD verification)
   const handleUpdatePayment = async (taskId: string) => {
     setUpdatingPaymentId(taskId);
+    const { fullTaskId, numericId, isSub } = normalizeTaskId(taskId);
+
     try {
-      let realId = taskId;
-      if (taskId.startsWith('ORD-')) {
-        realId = taskId.replace('ORD-', '');
+      const promises: Promise<any>[] = [
+        api.post("api/delivery/update_payment.php", {
+          order_id: numericId,
+          task_id: fullTaskId,
+          payment_status: "completed",
+          driver_id: user?.id,
+        }),
+      ];
+
+      if (!isSub && numericId > 0) {
+        promises.push(
+          api.post("api/admin/update-payment-status.php", {
+            order_id: numericId,
+            payment_status: "completed",
+          }).catch(() => null)
+        );
       }
 
-      const res = await api.post("api/delivery/update_payment.php", {
-        order_id: realId,
-        task_id: taskId,
-        payment_status: "paid",
-        driver_id: user?.id,
-      });
+      const [res] = await Promise.all(promises);
 
-      if (res.data.status === "success") {
+      if (res.data?.status === "success") {
         setTasks((prev) =>
-          prev.map((t) => (t.task_id === taskId ? { ...t, payment_status: "paid" } : t))
+          prev.map((t) =>
+            t.task_id === taskId || t.task_id === fullTaskId ? { ...t, payment_status: "completed" } : t
+          )
         );
-        if (selectedTask && selectedTask.task_id === taskId) {
-          setSelectedTask((prev) => (prev ? { ...prev, payment_status: "paid" } : null));
+        if (selectedTask && (selectedTask.task_id === taskId || selectedTask.task_id === fullTaskId)) {
+          setSelectedTask((prev) => (prev ? { ...prev, payment_status: "completed" } : null));
         }
+        Alert.alert("Payment Recorded", "Payment status updated to Paid.");
+        fetchTasks();
       } else {
-        Alert.alert("Payment Update Failed", res.data.message || "Could not record payment.");
+        Alert.alert("Payment Update Failed", res.data?.message || "Could not record payment.");
       }
     } catch (error) {
       Alert.alert("Network Error", "Unable to verify payment update with server.");
@@ -201,23 +344,89 @@ export default function DeliveryDashboard() {
     }
   };
 
+  // 🔥 Complete Delivery: Updates BOTH Delivery Status ('Delivered') and Payment Status ('completed')
+  const completeDeliveryWithPayment = async (task: Task) => {
+    const taskId = task.task_id;
+    const { fullTaskId, numericId, isSub } = normalizeTaskId(taskId);
+    setUpdatingTaskId(taskId);
+    setUpdatingPaymentId(taskId);
+
+    try {
+      const p1 = api.post("api/delivery/update_payment.php", {
+        order_id: numericId,
+        task_id: fullTaskId,
+        payment_status: "completed",
+        driver_id: user?.id,
+      });
+
+      const p2 = !isSub && numericId > 0
+        ? api.post("api/admin/update-payment-status.php", {
+            order_id: numericId,
+            payment_status: "completed",
+          }).catch(() => null)
+        : Promise.resolve(null);
+
+      const p3 = api.post("api/delivery/update_status.php", {
+        task_id: fullTaskId,
+        status: "Delivered",
+        payment_status: "completed",
+        driver_id: user?.id,
+      });
+
+      const [payRes, _, statusRes] = await Promise.allSettled([p1, p2, p3]);
+
+      // Optimistically update local states immediately
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.task_id === taskId || t.task_id === fullTaskId
+            ? { ...t, status: "Delivered", payment_status: "completed" }
+            : t
+        )
+      );
+      if (selectedTask && (selectedTask.task_id === taskId || selectedTask.task_id === fullTaskId)) {
+        setSelectedTask((prev) =>
+          prev ? { ...prev, status: "Delivered", payment_status: "completed" } : null
+        );
+      }
+
+      const statusOk =
+        statusRes.status === "fulfilled" && statusRes.value.data?.status === "success";
+      const payOk =
+        payRes.status === "fulfilled" && payRes.value.data?.status === "success";
+
+      if (statusOk || payOk) {
+        Alert.alert(
+          "Delivery Complete! 🎉",
+          `Order #${fullTaskId} marked Delivered and Payment recorded as Paid.`
+        );
+      } else {
+        Alert.alert("Update Error", "Could not complete delivery status update.");
+      }
+
+      fetchTasks();
+    } catch (error) {
+      console.error("Complete delivery error:", error);
+      Alert.alert("Network Error", "Unable to reach server to complete delivery.");
+    } finally {
+      setUpdatingTaskId(null);
+      setUpdatingPaymentId(null);
+    }
+  };
+
   // Dynamic Delivery confirmation dialog logic
   const confirmDelivery = (task: Task) => {
-    const isCOD = task.payment_method?.toLowerCase() === "cod";
-    const isPaid = task.payment_status?.toLowerCase() === "paid" || task.payment_status?.toLowerCase() === "completed";
+    const isCOD = isCODMethod(task.payment_method);
+    const isPaid = isPaidStatus(task.payment_status);
 
     if (isCOD && !isPaid) {
       Alert.alert(
         "Cash on Delivery Required",
-        `Please collect NPR ${task.amount} from ${task.customer} before finishing delivery.`,
+        `Please collect NPR ${task.amount} from ${task.customer} before completing delivery.`,
         [
           { text: "Cancel", style: "cancel" },
           {
             text: "Collect Cash & Deliver",
-            onPress: async () => {
-              await handleUpdatePayment(task.task_id);
-              await handleUpdateStatus(task.task_id, "Delivered");
-            },
+            onPress: () => completeDeliveryWithPayment(task),
           },
         ]
       );
@@ -226,12 +435,12 @@ export default function DeliveryDashboard() {
 
     Alert.alert(
       "Confirm Delivery",
-      `Mark Order ${task.task_id} as delivered to ${task.customer}?`,
+      `Mark Order #${task.task_id} as delivered to ${task.customer}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Yes, Mark Delivered",
-          onPress: () => handleUpdateStatus(task.task_id, "Delivered"),
+          onPress: () => completeDeliveryWithPayment(task),
         },
       ]
     );
@@ -248,11 +457,11 @@ export default function DeliveryDashboard() {
     const payStatus = (t.payment_status || "pending").toLowerCase();
 
     // 🔥 RULE: If it's a COD order, it's valid. If it's online payment, it MUST be paid/completed/success.
-    if (payMethod === "cod" || payMethod === "cash on delivery") {
+    if (isCODMethod(t.payment_method)) {
       return true;
     }
 
-    const isOnlinePaid = ["paid", "completed", "success"].includes(payStatus);
+    const isOnlinePaid = isPaidStatus(t.payment_status);
     return isOnlinePaid;
   };
 
@@ -280,8 +489,8 @@ export default function DeliveryDashboard() {
     typeFilteredTasks.forEach((t) => {
       const amt = Number(t.amount) || 0;
       const isDone = t.status?.toLowerCase() === "delivered" || t.status?.toLowerCase() === "completed";
-      const isPaid = t.payment_status?.toLowerCase() === "paid" || t.payment_status?.toLowerCase() === "completed";
-      const isCOD = t.payment_method?.toLowerCase() === "cod";
+      const isPaid = isPaidStatus(t.payment_status);
+      const isCOD = isCODMethod(t.payment_method);
 
       if (isDone) earnings += amt;
 
@@ -298,8 +507,9 @@ export default function DeliveryDashboard() {
     const locations = Array.from(
       new Set(
         typeFilteredTasks.map((t) => {
-          const parts = t.address ? t.address.split(",") : ["Central Dairy Depot"];
-          return parts[0].trim();
+          const clean = getCleanAddressText(t.address);
+          const parts = clean ? clean.split(",") : ["Central Dairy Depot"];
+          return parts[0].trim() || "Central Dairy Depot";
         })
       )
     ).slice(0, 3);
@@ -334,6 +544,66 @@ export default function DeliveryDashboard() {
     });
   }, [tasks, activeFilter, deliveryType, user?.id]);
 
+  const openCustomerMapLocation = async (task?: Task | null) => {
+    let targetTask = task;
+    if (!targetTask) {
+      targetTask =
+        filteredTasks.find(
+          (t) =>
+            t.status?.toLowerCase() !== "delivered" &&
+            t.status?.toLowerCase() !== "completed"
+        ) || filteredTasks[0] || tasks[0];
+    }
+
+    if (!targetTask) {
+      Alert.alert(
+        "No Active Orders",
+        "There are no assigned customer delivery orders to view on the map.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    const coords = getTaskCoordinates(targetTask);
+    const label = targetTask.customer ? `${targetTask.customer}` : "Customer Location";
+
+    if (coords) {
+      const { lat, lng } = coords;
+      // Google Maps with exact pinpoint query parameter
+      const googleMapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+
+      if (Platform.OS === "android") {
+        const geoUrl = `geo:${lat},${lng}?q=${lat},${lng}(${encodeURIComponent(label)})`;
+        try {
+          const canOpen = await Linking.canOpenURL(geoUrl);
+          if (canOpen) {
+            await Linking.openURL(geoUrl);
+            return;
+          }
+        } catch {
+          // Fallback to https link
+        }
+      } else if (Platform.OS === "ios") {
+        const appleMapsUrl = `maps:0,0?q=${encodeURIComponent(label)}@${lat},${lng}`;
+        try {
+          const canOpen = await Linking.canOpenURL(appleMapsUrl);
+          if (canOpen) {
+            await Linking.openURL(appleMapsUrl);
+            return;
+          }
+        } catch {
+          // Fallback
+        }
+      }
+
+      Linking.openURL(googleMapsUrl);
+    } else {
+      const clean = getCleanAddressText(targetTask.address);
+      const query = clean ? `${clean}, Kathmandu, Nepal` : "Kathmandu, Nepal";
+      Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(query)}`);
+    }
+  };
+
   const handleQuickAction = (type: string) => {
     if (type === "supervisor") {
       Alert.alert("Call Supervisor", "Dialing Central Dispatch & Depot Supervisor...", [
@@ -341,7 +611,7 @@ export default function DeliveryDashboard() {
         { text: "Call Now", onPress: () => Linking.openURL("tel:9800000000") },
       ]);
     } else if (type === "maps") {
-      Linking.openURL("https://maps.google.com/?q=Kathmandu,Nepal");
+      openCustomerMapLocation();
     } else if (type === "issue") {
       Alert.alert("Report Route Issue", "Select an operational issue to log with Central Support:", [
         { text: "Vehicle Breakdown", onPress: () => { } },
@@ -583,8 +853,8 @@ export default function DeliveryDashboard() {
 
   const renderTaskCard = useCallback(({ item }: { item: Task }) => {
     const isCompleted = item.status?.toLowerCase() === "delivered" || item.status?.toLowerCase() === "completed";
-    const isPaid = item.payment_status?.toLowerCase() === "paid" || item.payment_status?.toLowerCase() === "completed";
-    const isCOD = item.payment_method?.toLowerCase() === "cod";
+    const isPaid = isPaidStatus(item.payment_status);
+    const isCOD = isCODMethod(item.payment_method);
     const isSub = item.type === "Routine Subscription";
     const isUpdatingStatus = updatingTaskId === item.task_id;
     const isUpdatingPayment = updatingPaymentId === item.task_id;
@@ -634,7 +904,14 @@ export default function DeliveryDashboard() {
                 <Text style={styles.taskCustomerName} numberOfLines={1}>{item.customer}</Text>
                 <View style={styles.taskContactRow}>
                   <Feather name="map-pin" size={13} color={COLORS.textMuted} />
-                  <Text style={styles.taskAddressText} numberOfLines={1}>{item.address}</Text>
+                  <Text style={styles.taskAddressText} numberOfLines={1}>
+                    {getCleanAddressText(item.address) || item.address}
+                  </Text>
+                  {getTaskCoordinates(item) && (
+                    <View style={{ backgroundColor: "#E0F2FE", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, marginLeft: 4 }}>
+                      <Text style={{ fontSize: 9, color: "#0369A1", fontWeight: "700" }}>GPS PIN</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.taskContactRow}>
                   <Feather name="phone" size={13} color={COLORS.textMuted} />
@@ -719,7 +996,7 @@ export default function DeliveryDashboard() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btnActionSecondary, { flex: 1.3 }]}
-                onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(item.address)}`)}
+                onPress={() => openCustomerMapLocation(item)}
                 activeOpacity={0.7}
               >
                 <Feather name="map-pin" size={15} color={COLORS.infoText} />
@@ -846,8 +1123,8 @@ export default function DeliveryDashboard() {
   const renderOrderDetailsModal = () => {
     if (!selectedTask) return null;
     const isCompleted = selectedTask.status?.toLowerCase() === "delivered" || selectedTask.status?.toLowerCase() === "completed";
-    const isPaid = selectedTask.payment_status?.toLowerCase() === "paid" || selectedTask.payment_status?.toLowerCase() === "completed";
-    const isCOD = selectedTask.payment_method?.toLowerCase() === "cod";
+    const isPaid = isPaidStatus(selectedTask.payment_status);
+    const isCOD = isCODMethod(selectedTask.payment_method);
     const isSub = selectedTask.type === "Routine Subscription";
     const isUpdatingThisStatus = updatingTaskId === selectedTask.task_id;
     const isUpdatingThisPayment = updatingPaymentId === selectedTask.task_id;
@@ -921,11 +1198,18 @@ export default function DeliveryDashboard() {
                   </View>
                   <View style={{ flex: 1, marginRight: 10 }}>
                     <Text style={styles.modalContactLabel}>Delivery Address</Text>
-                    <Text style={styles.modalContactValue}>{selectedTask.address}</Text>
+                    <Text style={styles.modalContactValue}>
+                      {getCleanAddressText(selectedTask.address) || selectedTask.address}
+                    </Text>
+                    {getTaskCoordinates(selectedTask) && (
+                      <Text style={{ fontSize: 11, color: COLORS.infoText, marginTop: 2, fontWeight: "600" }}>
+                        📍 Exact Pinpoint: {getTaskCoordinates(selectedTask)?.lat.toFixed(5)}, {getTaskCoordinates(selectedTask)?.lng.toFixed(5)}
+                      </Text>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={styles.modalActionMiniBtn}
-                    onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(selectedTask.address)}`)}
+                    onPress={() => openCustomerMapLocation(selectedTask)}
                   >
                     <Feather name="navigation" size={13} color={COLORS.white} style={{ marginRight: 4 }} />
                     <Text style={styles.modalActionMiniText}>Map</Text>
